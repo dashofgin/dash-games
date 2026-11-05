@@ -1,6 +1,6 @@
 {
     "id": "@WEBOS_APPINFO_ID@",
-    "version": "2.0.0",
+    "version": "@PROJECT_VERSION@",
     "vendor": "Mariotaku Lee",
     "type": "native",
     "main": "bin/moonlight",

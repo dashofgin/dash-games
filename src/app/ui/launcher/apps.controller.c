@@ -10,6 +10,7 @@
 #include "ui/streaming/streaming.controller.h"
 
 #include "coverloader.h"
+#include "dash_home.h"
 #include "backend/apploader/apploader.h"
 #include <errors.h>
 #include <assert.h>
@@ -183,43 +184,14 @@ static lv_obj_t *apps_view(lv_fragment_t *self, lv_obj_t *container) {
     lv_obj_set_size(view, LV_PCT(100), LV_PCT(100));
     lv_obj_set_scroll_dir(view, LV_DIR_NONE);
 
-    // Dash Games hero header: big title of the focused game, stream settings, hints
-    lv_obj_t *hero = controller->hero = lv_obj_create(view);
-    lv_obj_remove_style_all(hero);
-    lv_obj_clear_flag(hero, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(hero, LV_PCT(100), LV_PCT(DASH_HERO_HEIGHT_PCT));
-    lv_obj_align(hero, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_style_pad_hor(hero, lv_dpx(28), 0);
-    lv_obj_set_style_pad_top(hero, lv_dpx(22), 0);
-    lv_obj_set_flex_flow(hero, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(hero, lv_dpx(6), 0);
-    lv_obj_t *hero_title = controller->hero_title = lv_label_create(hero);
-    lv_obj_set_width(hero_title, LV_PCT(100));
-    lv_label_set_long_mode(hero_title, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(hero_title, lv_theme_get_font_large(hero), 0);
-    lv_obj_set_style_text_color(hero_title, lv_color_white(), 0);
-    lv_label_set_text(hero_title, "");
-    lv_obj_t *hero_info = controller->hero_info = lv_label_create(hero);
-    lv_obj_set_style_text_font(hero_info, lv_theme_get_font_small(hero), 0);
-    lv_obj_set_style_text_color(hero_info, lv_color_hex(DASH_COLOR_PRIMARY), 0);
-    lv_obj_t *hero_hint = lv_label_create(hero);
-    lv_obj_set_style_text_font(hero_hint, lv_theme_get_font_small(hero), 0);
-    lv_obj_set_style_text_color(hero_hint, lv_color_hex(DASH_COLOR_MUTED), 0);
-    lv_label_set_text(hero_hint, "OK: graj    •    przytrzymaj OK: więcej opcji");
-    apps_controller_hero_update(controller, 0);
-
-    lv_obj_t *applist = controller->applist = lv_gridview_create(view);
-    lv_obj_add_flag(applist, LV_OBJ_FLAG_EVENT_BUBBLE);
-    lv_obj_set_scroll_dir(applist, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(applist, LV_SCROLLBAR_MODE_ACTIVE);
-    lv_obj_set_style_pad_all(applist, lv_dpx(24), 0);
-    lv_obj_set_style_pad_gap(applist, lv_dpx(24), 0);
-    lv_obj_set_style_radius(applist, 0, 0);
-    lv_obj_set_style_border_side(applist, LV_BORDER_SIDE_NONE, 0);
-    lv_obj_set_style_bg_opa(applist, 0, 0);
-    lv_obj_set_size(applist, LV_PCT(100), LV_PCT(100 - DASH_HERO_HEIGHT_PCT));
-    lv_obj_align(applist, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-    lv_obj_update_layout(applist);
+    // Dash Games home (Apple TV style): builds the shelf and the single-row games gridview
+    dash_home_create(controller, view);
+    lv_obj_t *applist = controller->applist;
+    {
+        launcher_fragment_t *pc = (launcher_fragment_t *) lv_fragment_get_parent(&controller->base);
+        if (lv_obj_get_group(applist)) { lv_group_remove_obj(applist); }
+        lv_group_add_obj(pc->detail_group, applist);
+    }
 
     lv_gridview_set_adapter(applist, &apps_adapter);
     lv_obj_t *appload = controller->appload = lv_spinner_create(view, 1000, 60);
@@ -301,20 +273,19 @@ static void obj_will_delete(lv_fragment_t *self, lv_obj_t *obj) {
 
 static void update_grid_config(apps_fragment_t *controller) {
     lv_obj_t *applist = controller->applist;
-    lv_obj_update_layout(applist);
-    lv_coord_t applist_width = lv_obj_get_width(applist);
-    int col_count = LV_CLAMP(3, applist_width / lv_dpx(150), 5);
-    lv_coord_t col_width = (applist_width - lv_obj_get_style_pad_left(applist, 0) -
-                            lv_obj_get_style_pad_right(applist, 0) -
-                            lv_obj_get_style_pad_column(applist, 0) * (col_count - 1)) / col_count;
-    controller->col_count = col_count;
-    controller->col_width = col_width;
-    lv_coord_t row_height = col_width / 3 * 4;
-    controller->col_height = row_height;
-    lv_gridview_set_config(applist, col_count, row_height, LV_GRID_ALIGN_CENTER, LV_GRID_ALIGN_CENTER);
+    lv_coord_t tile_w, tile_h;
+    dash_home_tile_size(controller, &tile_w, &tile_h);
+    int count = LV_MAX(1, dash_home_visible_count(controller));
+    controller->col_count = count;
+    controller->col_width = tile_w;
+    controller->col_height = tile_h;
+    lv_coord_t width = count * tile_w + (count - 1) * lv_obj_get_style_pad_column(applist, 0) +
+                       lv_obj_get_style_pad_left(applist, 0) + lv_obj_get_style_pad_right(applist, 0);
+    lv_obj_set_width(applist, width);
+    lv_gridview_set_config(applist, count, tile_h, LV_GRID_ALIGN_CENTER, LV_GRID_ALIGN_CENTER);
 
-    controller->appitem_style.defcover_src.header.w = col_width;
-    controller->appitem_style.defcover_src.header.h = row_height;
+    controller->appitem_style.defcover_src.header.w = tile_w;
+    controller->appitem_style.defcover_src.header.h = tile_h;
 }
 
 static void on_destroy_view(lv_fragment_t *self, lv_obj_t *view) {
@@ -322,6 +293,7 @@ static void on_destroy_view(lv_fragment_t *self, lv_obj_t *view) {
     current_instance = NULL;
     apps_fragment_t *controller = (apps_fragment_t *) self;
     controller->show_hidden_apps = false;
+    dash_home_destroy(controller);
     pcmanager_unregister_listener(pcmanager, &pc_listeners);
     coverloader_unref(controller->coverloader);
 }
@@ -490,7 +462,9 @@ static void show_progress(apps_fragment_t *fragment) {
 }
 
 static void show_ok(apps_fragment_t *fragment) {
-    lv_obj_clear_flag(fragment->applist, LV_OBJ_FLAG_HIDDEN);
+    if (dash_home_visible_count(fragment) > 0) {
+        lv_obj_clear_flag(fragment->applist, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_add_flag(fragment->apperror, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(fragment->appload, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(fragment->actions, LV_OBJ_FLAG_HIDDEN);
@@ -525,6 +499,8 @@ static void appload_loaded(apploader_list_t *apps, void *userdata) {
     }
     int num_changes = -1;
     lv_gridview_data_change_t *changes = apps_list_detect_change(fragment->apploader_apps, apps, &num_changes);
+    dash_home_rebuild(fragment, apps);
+    update_grid_config(fragment);
     if (num_changes != 0) {
         lv_gridview_focus(fragment->applist, -1);
     }
@@ -535,6 +511,7 @@ static void appload_loaded(apploader_list_t *apps, void *userdata) {
     apploader_list_free(fragment->apploader_apps);
     fragment->apploader_apps = apps;
     update_view_state(fragment);
+    dash_home_focus_app(fragment, 0);
 
     if (fragment->def_app > 0 && !fragment->def_app_launched) {
         fragment->def_app_launched = true;
@@ -564,6 +541,7 @@ static void appitem_bind(apps_fragment_t *controller, lv_obj_t *item, apploader_
     coverloader_display(controller->coverloader, &controller->uuid, app->base.id, item,
                         controller->col_width, controller->col_height);
     lv_label_set_text(holder->title, app->base.name);
+    dash_home_bind_tile(controller, item, app);
 
     int current_id = pcmanager_server_current_app(pcmanager, &controller->uuid);
     if (current_id == app->base.id) {
@@ -608,6 +586,7 @@ static void item_longpress_cb(lv_event_t *event) {
 
 static void launcher_launch_game(apps_fragment_t *controller, const apploader_item_t *app) {
     LV_ASSERT(app->base.id != 0);
+    dash_home_record_launch(controller, app);
     streaming_scene_arg_t args = {
             .global = controller->global,
             .uuid = controller->uuid,
@@ -638,18 +617,7 @@ static void launcher_quit_game(apps_fragment_t *controller) {
 static int adapter_item_count(lv_obj_t *grid, void *data) {
     if (data == NULL) { return 0; }
     apps_fragment_t *controller = lv_obj_get_user_data(grid);
-    apploader_list_t *list = data;
-    // LVGL can only display up to 255 rows/columns, but I don't think anyone has library that big (1275 items)
-    int count = LV_MIN(list->count, 255 * controller->col_count);
-    if (!controller->show_hidden_apps) {
-        for (int i = 0; i < count; i++) {
-            if (list->items[i].hidden) {
-                count = i;
-                break;
-            }
-        }
-    }
-    return count;
+    return dash_home_visible_count(controller);
 }
 
 static lv_obj_t *adapter_create_view(lv_obj_t *parent) {
@@ -660,7 +628,9 @@ static lv_obj_t *adapter_create_view(lv_obj_t *parent) {
 static void adapter_bind_view(lv_obj_t *grid, lv_obj_t *item_view, void *data, int position) {
     apps_fragment_t *controller = lv_obj_get_user_data(grid);
     apploader_list_t *list = data;
-    appitem_bind(controller, item_view, &list->items[position]);
+    int index = dash_home_visible_index(controller, position);
+    if (index < 0) { return; }
+    appitem_bind(controller, item_view, &list->items[index]);
 
     // IDE seems to be pretty confused...
     LV_UNUSED(list);
@@ -854,32 +824,36 @@ static lv_gridview_data_change_t *apps_list_detect_change(const apploader_list_t
     return NULL;
 }
 
-static const char *dash_resolution_name(int width, int height) {
-    static char buf[24];
-    switch (height) {
-        case 2160: return "4K";
-        case 1440: return "1440p";
-        case 1080: return "1080p";
-        case 720: return "720p";
-        default:
-            snprintf(buf, sizeof(buf), "%dx%d", width, height);
-            return buf;
-    }
+void apps_controller_hero_update(apps_fragment_t *controller, int app_id) {
+    dash_home_focus_app(controller, app_id);
 }
 
-void apps_controller_hero_update(apps_fragment_t *controller, int app_id) {
-    if (controller == NULL || controller->hero_title == NULL) { return; }
-    const apploader_item_t *app = NULL;
-    if (app_id != 0 && controller->apploader_apps != NULL) {
-        app = apploader_list_item_by_id(controller->apploader_apps, app_id);
-    }
-    if (app != NULL) {
-        lv_label_set_text(controller->hero_title, app->base.name);
-    }
-    const STREAM_CONFIGURATION *stream = &app_configuration->stream;
-    const char *codec = app_configuration->av1 ? "AV1" : app_configuration->hevc ? "HEVC" : "H.264";
-    const char *audio = app_configuration->audio_backend ? app_configuration->audio_backend : "auto";
-    lv_label_set_text_fmt(controller->hero_info, "%s%d  •  %s  •  %d Mb/s  •  audio: %s",
-                          dash_resolution_name(stream->width, stream->height), stream->fps, codec,
-                          stream->bitrate / 1000, audio);
+void apps_controller_reload_grid(apps_fragment_t *controller) {
+    dash_home_rebuild(controller, controller->apploader_apps);
+    update_grid_config(controller);
+    lv_gridview_focus(controller->applist, -1);
+    controller->focus_backup = 0;
+    lv_gridview_set_data_advanced(controller->applist, controller->apploader_apps, NULL, -1);
+    lv_obj_scroll_to_x(lv_obj_get_parent(controller->applist), 0, LV_ANIM_OFF);
+    dash_home_focus_app(controller, 0);
+}
+
+void apps_controller_launch(apps_fragment_t *controller, const apploader_item_t *app) {
+    launcher_launch_game(controller, app);
+}
+
+void apps_controller_quit(apps_fragment_t *controller) {
+    launcher_quit_game(controller);
+}
+
+void apps_controller_open_menu(apps_fragment_t *controller, int app_id) {
+    static appitem_viewholder_t menu_holder;
+    memset(&menu_holder, 0, sizeof(menu_holder));
+    menu_holder.app_id = app_id;
+    menu_holder.controller = controller;
+    open_context_menu(controller, &menu_holder);
+}
+
+void apps_controller_wake(apps_fragment_t *controller) {
+    pcmanager_send_wol(pcmanager, &controller->uuid, send_wol_cb, NULL);
 }

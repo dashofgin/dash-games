@@ -60,6 +60,8 @@ typedef struct app_settings_t {
     bool touchpad_natural_scroll;
     bool swap_abxy;
     bool syskey_capture;
+    /* Dash Games */
+    bool dash_show_stats;
     bool hdr;
     bool hevc;
     bool av1;

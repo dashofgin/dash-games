@@ -236,6 +236,11 @@ static void on_view_created(lv_fragment_t *self, lv_obj_t *view) {
     controller->notice_label = notice_label;
 
     lv_obj_add_event_cb(controller->stats_pin, pin_toggle, LV_EVENT_VALUE_CHANGED, controller->stats);
+    if (app_configuration->dash_show_stats) {
+        // Dash Games: keep connection stats visible during the stream
+        lv_obj_add_state(controller->stats_pin, LV_STATE_CHECKED);
+        lv_event_send(controller->stats_pin, LV_EVENT_VALUE_CHANGED, NULL);
+    }
 
 #if !defined(TARGET_WEBOS)
     const app_settings_t *settings = &controller->global->settings;

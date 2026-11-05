@@ -10,6 +10,8 @@ target_sources(moonlight-lib PRIVATE
         launcher/appitem.view.c
         launcher/server.context_menu.c
         launcher/coverloader.c
+        launcher/steamart.c
+        launcher/dash_home.c
         streaming/streaming.view.c
         streaming/streaming.controller.c
         streaming/hints.c

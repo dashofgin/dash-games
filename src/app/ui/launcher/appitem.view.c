@@ -27,16 +27,23 @@ lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
     lv_obj_set_style_transform_pivot_y(item, controller->col_height / 2, 0);
 
     lv_obj_set_style_transform_zoom(item, 256 * 99 / 100, LV_STATE_PRESSED);
-    lv_obj_set_style_transform_zoom(item, 256 * 108 / 100, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_color(item, lv_color_hex(DASH_COLOR_PRIMARY), LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_opa(item, LV_OPA_70, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_width(item, LV_DPX(30), LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_ofs_y(item, 0, LV_STATE_FOCUS_KEY);
+    // Dash Games: tvOS-like lift on focus (scale + soft shadow + thin white outline)
+    lv_obj_set_style_transform_zoom(item, 256 * 110 / 100, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_color(item, lv_color_black(), LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_opa(item, LV_OPA_60, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_width(item, LV_DPX(28), LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_ofs_y(item, LV_DPX(10), LV_STATE_FOCUS_KEY);
     lv_obj_set_style_transition(item, &styles->tr_pressed, LV_STATE_PRESSED | LV_STATE_FOCUS_KEY);
     lv_obj_set_style_transition(item, &styles->tr_released, LV_STATE_DEFAULT);
     lv_obj_add_event_cb(item, appitem_draw_decor, LV_EVENT_DRAW_MAIN, styles);
     lv_obj_add_event_cb(item, appitem_selected, LV_EVENT_FOCUSED, NULL);
     lv_obj_add_event_cb(item, appitem_deselected, LV_EVENT_DEFOCUSED, NULL);
+
+    lv_obj_t *art = lv_img_create(item);
+    lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(art, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_set_style_radius(art, LV_DPX(10), 0);
+    lv_obj_set_style_clip_corner(art, true, 0);
 
     lv_obj_t *play_indicator = lv_label_create(item);
     lv_obj_clear_flag(play_indicator, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
@@ -60,6 +67,7 @@ lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
     holder->styles = styles;
     holder->play_indicator = play_indicator;
     holder->title = title;
+    holder->art = art;
     lv_obj_set_user_data(item, holder);
     lv_obj_add_event_cb(item, appitem_holder_free_cb, LV_EVENT_DELETE, holder);
     return item;
@@ -68,13 +76,13 @@ lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
 void appitem_style_init(appitem_styles_t *style) {
     lv_style_init(&style->cover);
     lv_style_set_pad_all(&style->cover, 0);
-    lv_style_set_radius(&style->cover, LV_DPX(6));
+    lv_style_set_radius(&style->cover, LV_DPX(10));
     lv_style_set_clip_corner(&style->cover, true);
     lv_style_set_shadow_opa(&style->cover, LV_OPA_40);
     lv_style_set_shadow_width(&style->cover, LV_DPX(15));
     lv_style_set_shadow_ofs_y(&style->cover, LV_DPX(3));
-    lv_style_set_outline_color(&style->cover, lv_color_hex(DASH_COLOR_PRIMARY));
-    lv_style_set_outline_width(&style->cover, LV_DPX(3));
+    lv_style_set_outline_color(&style->cover, lv_color_white());
+    lv_style_set_outline_width(&style->cover, LV_DPX(2));
     lv_style_set_outline_opa(&style->cover, LV_OPA_TRANSP);
     lv_style_set_outline_pad(&style->cover, LV_DPX(3));
 
@@ -149,6 +157,7 @@ static void appitem_selected(lv_event_t *e) {
     appitem_viewholder_t *holder = lv_obj_get_user_data(item);
     lv_label_set_long_mode(holder->title, LV_LABEL_LONG_SCROLL_CIRCULAR);
     apps_controller_hero_update(holder->controller, holder->app_id);
+    lv_obj_scroll_to_view_recursive(item, LV_ANIM_ON);
 }
 
 static void appitem_deselected(lv_event_t *e) {

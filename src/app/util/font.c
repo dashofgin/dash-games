@@ -16,7 +16,9 @@ int app_font_init(app_fonts_t *fonts, int dpi) {
     app_fontset_t fontset = {
             .small_size = _LV_DPX_CALC(dpi, 14),
             .normal_size = _LV_DPX_CALC(dpi, 16),
-            .large_size = _LV_DPX_CALC(dpi, 19)
+            .large_size = _LV_DPX_CALC(dpi, 19),
+            .title_size = _LV_DPX_CALC(dpi, 26),
+            .display_size = _LV_DPX_CALC(dpi, 44),
     };
     app_fontset_t iconfonts = fontset;
     if (!fontset_load_mem(&iconfonts, "MaterialIcons", res_mat_iconfont_data, res_mat_iconfont_size)) {
@@ -110,6 +112,18 @@ static bool fontset_load_fc(app_fontset_t *set, FcPattern *font) {
         if (lv_ft_font_init(&ft_info_sm)) {
             set->small = ft_info_sm.font;
         }
+        if (set->title_size > 0) {
+            lv_ft_info_t ft_info_title = {.name=(char *) file, .style = FT_FONT_STYLE_BOLD, .weight = set->title_size};
+            if (lv_ft_font_init(&ft_info_title)) {
+                set->title = ft_info_title.font;
+            }
+        }
+        if (set->display_size > 0) {
+            lv_ft_info_t ft_info_disp = {.name=(char *) file, .style = FT_FONT_STYLE_BOLD, .weight = set->display_size};
+            if (lv_ft_font_init(&ft_info_disp)) {
+                set->display = ft_info_disp.font;
+            }
+        }
         return true;
     }
     return false;
@@ -150,6 +164,8 @@ static bool fontset_load_mem(app_fontset_t *set, const char *name, const void *m
 }
 
 static void fontset_destroy_fonts(app_fontset_t *fontset) {
+    if (fontset->title) { lv_ft_font_destroy(fontset->title); }
+    if (fontset->display) { lv_ft_font_destroy(fontset->display); }
     lv_ft_font_destroy(fontset->large);
     lv_ft_font_destroy(fontset->normal);
     lv_ft_font_destroy(fontset->small);

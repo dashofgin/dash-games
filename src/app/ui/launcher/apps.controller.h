@@ -17,7 +17,7 @@ typedef struct {
 } appitem_styles_t;
 
 
-typedef struct {
+typedef struct apps_fragment_t {
     lv_fragment_t base;
     app_t *global;
     uuidstr_t uuid;
@@ -42,6 +42,7 @@ typedef struct {
 
     /* Dash Games: hero header with the focused game */
     lv_obj_t *hero, *hero_title, *hero_info;
+    struct dash_home_t *home;
 
     appitem_styles_t appitem_style;
     int col_count;
@@ -55,6 +56,7 @@ typedef struct {
     const appitem_styles_t *styles;
     lv_obj_t *play_indicator;
     lv_obj_t *title;
+    lv_obj_t *art; /* Dash Games: landscape Steam header over the cover */
 } appitem_viewholder_t;
 
 typedef struct {
@@ -66,3 +68,14 @@ typedef struct {
 extern const lv_fragment_class_t apps_controller_class;
 
 void apps_controller_hero_update(apps_fragment_t *controller, int app_id);
+
+/* Dash Games home helpers */
+void apps_controller_reload_grid(apps_fragment_t *controller);
+
+void apps_controller_launch(apps_fragment_t *controller, const apploader_item_t *app);
+
+void apps_controller_quit(apps_fragment_t *controller);
+
+void apps_controller_open_menu(apps_fragment_t *controller, int app_id);
+
+void apps_controller_wake(apps_fragment_t *controller);

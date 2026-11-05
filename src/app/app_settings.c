@@ -151,6 +151,9 @@ bool settings_save(app_settings_t *config) {
     }
     ini_write_string(fp, "surround", serialize_audio_config(config->stream.audioConfiguration));
 
+    ini_write_section(fp, "dash");
+    ini_write_bool(fp, "show_stats", config->dash_show_stats);
+
     if (!config->fullscreen) {
         ini_write_section(fp, "window");
         ini_write_int(fp, "x", config->window_state.x);
@@ -326,6 +329,8 @@ static int settings_parse(app_settings_t *config, const char *section, const cha
         config->syskey_capture = INI_IS_TRUE(value);
     } else if (INI_FULL_MATCH("video", "decoder")) {
         set_string(&config->decoder, value);
+    } else if (INI_FULL_MATCH("dash", "show_stats")) {
+        config->dash_show_stats = INI_IS_TRUE(value);
     } else if (INI_FULL_MATCH("audio", "backend")) {
         set_string(&config->audio_backend, value);
     } else if (INI_FULL_MATCH("audio", "device")) {

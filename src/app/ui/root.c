@@ -1,3 +1,4 @@
+#include "ui/dash_theme.h"
 #include "app.h"
 #include "root.h"
 #include "res.h"
@@ -78,11 +79,14 @@ void app_ui_open(app_ui_t *ui, bool open_launcher, const app_launch_params_t *pa
     }
     lv_disp_drv_t *driver = lv_app_disp_drv_create(ui->window, ui->dpi);
     lv_disp_t *disp = lv_disp_drv_register(driver);
-    disp->bg_color = lv_color_make(0, 0, 0);
+    disp->bg_color = lv_color_hex(DASH_COLOR_BG);
     disp->bg_opa = 0;
     ui->disp = disp;
 
-    lv_theme_t *parent_theme = lv_disp_get_theme(ui->disp);
+    // Dash Games: cyan/violet accent instead of the stock palette
+    lv_theme_t *parent_theme = lv_theme_default_init(ui->disp, lv_color_hex(DASH_COLOR_PRIMARY),
+                                                     lv_color_hex(DASH_COLOR_SECONDARY), true,
+                                                     lv_disp_get_theme(ui->disp)->font_normal);
     ui->theme.color_primary = parent_theme->color_primary;
     ui->theme.color_secondary = parent_theme->color_secondary;
     lv_theme_set_parent(&ui->theme, parent_theme);

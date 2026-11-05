@@ -48,10 +48,11 @@ void settings_initialize(app_settings_t *config, char *conf_dir) {
     memset(config, 0, sizeof(CONFIGURATION));
     LiInitializeStreamConfiguration(&config->stream);
 
-    config->stream.width = 1280;
-    config->stream.height = 720;
+    // Dash Games defaults: 4K60, 80 Mbps (HEVC is enabled below)
+    config->stream.width = 3840;
+    config->stream.height = 2160;
     config->stream.fps = 60;
-    config->stream.bitrate = settings_optimal_bitrate(NULL, 1280, 720, 60);
+    config->stream.bitrate = 80000;
     config->stream.packetSize = 1392;
     config->stream.streamingRemotely = STREAM_CFG_AUTO;
     config->stream.audioConfiguration = AUDIO_CONFIGURATION_STEREO;

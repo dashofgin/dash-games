@@ -1,3 +1,4 @@
+#include "ui/dash_theme.h"
 #include "launcher.controller.h"
 #include "apps.controller.h"
 
@@ -64,7 +65,8 @@ lv_obj_t *launcher_win_create(lv_fragment_t *self, lv_obj_t *parent) {
 
     lv_obj_set_style_pad_all(detail, 0, 0);
     lv_obj_set_style_radius(detail, 0, 0);
-    lv_obj_set_style_bg_color(detail, lv_color_lighten(lv_color_black(), 30), 0);
+    lv_obj_set_style_bg_color(detail, lv_color_hex(DASH_COLOR_BG_PANEL), 0);
+    lv_obj_set_style_bg_color(nav, lv_color_hex(DASH_COLOR_BG), 0);
     lv_obj_set_style_shadow_color(detail, lv_color_black(), 0);
     lv_obj_set_style_shadow_opa(detail, LV_OPA_MAX, 0);
     lv_obj_set_style_shadow_width(detail, lv_dpx(5), 0);
@@ -78,7 +80,7 @@ lv_obj_t *launcher_win_create(lv_fragment_t *self, lv_obj_t *parent) {
     lv_obj_set_flex_flow(title, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(title, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_bg_opa(title, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(title, lv_color_darken(lv_color_hex(0x2f3237), 4), 0);
+    lv_obj_set_style_bg_color(title, lv_color_hex(DASH_COLOR_BG_HEADER), 0);
     lv_obj_set_style_pad_gap(title, 0, 0);
 
     lv_obj_t *title_logo = lv_img_create(title);
@@ -90,7 +92,7 @@ lv_obj_t *launcher_win_create(lv_fragment_t *self, lv_obj_t *parent) {
     lv_obj_t *title_label = lv_label_create(title);
     lv_obj_set_style_pad_hor(title_label, 0, 0);
     lv_obj_set_style_text_font(title_label, lv_theme_get_font_large(title), 0);
-    lv_label_set_text_static(title_label, "Moonlight");
+    lv_label_set_text_static(title_label, "Dash Games");
     lv_obj_get_style_flex_grow(title_label, 1);
 
     lv_obj_t *pclist = lv_list_create(nav);

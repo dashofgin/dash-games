@@ -1,3 +1,4 @@
+#include "ui/dash_theme.h"
 #include "appitem.view.h"
 #include "res.h"
 
@@ -68,7 +69,7 @@ void appitem_style_init(appitem_styles_t *style) {
     lv_style_set_shadow_opa(&style->cover, LV_OPA_40);
     lv_style_set_shadow_width(&style->cover, LV_DPX(15));
     lv_style_set_shadow_ofs_y(&style->cover, LV_DPX(3));
-    lv_style_set_outline_color(&style->cover, lv_color_lighten(lv_palette_main(LV_PALETTE_BLUE), 30));
+    lv_style_set_outline_color(&style->cover, lv_color_hex(DASH_COLOR_PRIMARY));
     lv_style_set_outline_width(&style->cover, LV_DPX(2));
     lv_style_set_outline_opa(&style->cover, LV_OPA_TRANSP);
     lv_style_set_outline_pad(&style->cover, LV_DPX(3));

@@ -43,8 +43,18 @@ void steamart_request(const char *app_name, steamart_kind_t kind, lv_obj_t *owne
 void steamart_request_sized(const char *app_name, steamart_kind_t kind, lv_coord_t w, lv_coord_t h, bool cover,
                             lv_obj_t *owner, steamart_cb_t cb, void *userdata);
 
+/**
+ * Tile made from a local cover image (the host's box art): the whole cover is fitted in the middle on a blurred,
+ * darkened copy of itself. Waits up to ~10 s for the file to appear (the cover loader may still be downloading it).
+ */
+void steamart_request_cover_tile(const char *cover_path, lv_coord_t w, lv_coord_t h, lv_obj_t *owner,
+                                 steamart_cb_t cb, void *userdata);
+
 /** Whether this app name is a Vibepollo/Sunshine built-in (Desktop, Steam Big Picture...) with no Steam page. */
 bool steamart_is_builtin(const char *app_name);
+
+/** Polish short description from the Steam store (empty if unknown / not resolved yet). */
+bool steamart_get_desc(const char *app_name, char *out, size_t len);
 
 /** Tagline for the shelf, chosen by known app or Steam genre. Never NULL. */
 const char *steamart_tagline(const char *app_name, const char *genre);

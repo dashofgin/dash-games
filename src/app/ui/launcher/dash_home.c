@@ -15,6 +15,9 @@
 #include "lvgl/theme/lv_theme_moonlight.h"
 #include "lv_gridview.h"
 #include "util/i18n.h"
+#include "util/path.h"
+#include "ui/root.h"
+#include "lvgl/util/lv_app_utils.h"
 #include "app_settings.h"
 #include "backend/pcmanager.h"
 #include "lvgl/font/material_icons_regular_symbols.h"
@@ -44,7 +47,7 @@ typedef struct dash_home_t {
     lv_obj_t *backdrop, *shade_h, *shade_v;
     lv_obj_t *tabs[DASH_TABS];
     lv_obj_t *clock;
-    lv_obj_t *shelf, *chip, *logo, *title, *tagline, *info;
+    lv_obj_t *shelf, *chip, *logo, *title, *tagline, *desc, *info;
     lv_obj_t *btn_primary, *btn_primary_lbl, *btn_secondary, *btn_secondary_lbl;
     lv_obj_t *quick[DASH_QUICK], *quick_sub[DASH_QUICK];
     lv_obj_t *games_label, *games_scroll;
@@ -57,6 +60,8 @@ typedef struct dash_home_t {
 
     int focused_app_id;      /* app whose info is on the shelf */
     int shelf_mode_running;  /* shelf shows the running game */
+    int shelf_app_id;        /* app the shelf buttons act on */
+    lv_obj_t *quick_box;
     char shelf_name[128];
 
     int row;
@@ -84,6 +89,8 @@ static void clock_tick(lv_timer_t *t);
 static void art_timer_cb(lv_timer_t *t);
 
 static void focus_row(dash_home_t *home, int row);
+
+static const apploader_item_t *app_by_id(apps_fragment_t *c, int id);
 
 static void shelf_update(dash_home_t *home);
 
@@ -331,6 +338,9 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     h->shade_v = make_shade(view, LV_GRAD_DIR_VER, color_a(DASH_COLOR_BG, 0), color_a(DASH_COLOR_BG, 255), 90);
     lv_obj_set_size(h->shade_v, LV_PCT(100), LV_PCT(DASH_BACKDROP_PCT));
     lv_obj_add_event_cb(h->shade_v, shade_free_cb, LV_EVENT_DELETE, NULL);
+    lv_obj_t *shade_top = make_shade(view, LV_GRAD_DIR_VER, color_a(DASH_COLOR_BG, 190), color_a(DASH_COLOR_BG, 0), 0);
+    lv_obj_set_size(shade_top, LV_PCT(100), LV_PCT(20));
+    lv_obj_add_event_cb(shade_top, shade_free_cb, LV_EVENT_DELETE, NULL);
 
     /* top bar: tabs + clock */
     lv_obj_t *bar = lv_obj_create(view);
@@ -356,6 +366,20 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
         h->tabs[i] = tab;
     }
     lv_obj_add_state(h->tabs[TAB_GAMES], LV_STATE_CHECKED);
+    lv_obj_t *brand = lv_obj_create(view);
+    lv_obj_remove_style_all(brand);
+    lv_obj_clear_flag(brand, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(brand, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(brand, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(brand, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(brand, LV_DPX(10), 0);
+    lv_obj_align(brand, LV_ALIGN_TOP_LEFT, LV_DPX(36), LV_DPX(20));
+    lv_obj_t *brand_logo = lv_img_create(brand);
+    lv_img_set_src(brand_logo, ui_logo_src());
+    lv_obj_t *brand_name = lv_label_create(brand);
+    lv_obj_set_style_text_font(brand_name, lv_theme_get_font_large(brand), 0);
+    lv_obj_set_style_text_color(brand_name, lv_color_white(), 0);
+    lv_label_set_text_static(brand_name, "Dash Games");
     h->clock = lv_label_create(view);
     lv_obj_set_style_text_font(h->clock, lv_theme_get_font_large(view), 0);
     lv_obj_set_style_text_color(h->clock, lv_color_hex(0xE8E8EE), 0);
@@ -370,7 +394,7 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     lv_obj_set_size(shelf, LV_PCT(70), LV_SIZE_CONTENT);
     lv_obj_update_layout(view);
     lv_obj_align(shelf, LV_ALIGN_BOTTOM_LEFT, LV_DPX(36),
-                 -(lv_obj_get_height(view) * (100 - DASH_QUICK_Y_PCT + 3) / 100));
+                 -(lv_obj_get_height(view) * (100 - DASH_GAMES_LABEL_Y_PCT + 3) / 100));
     lv_obj_set_flex_flow(shelf, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(shelf, LV_DPX(8), 0);
 
@@ -389,8 +413,9 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     lv_obj_add_flag(h->logo, LV_OBJ_FLAG_HIDDEN);
 
     h->title = lv_label_create(shelf);
-    lv_obj_set_style_text_font(h->title, font_title(shelf), 0);
-    lv_obj_set_style_text_color(h->title, lv_color_white(), 0);
+    lv_obj_set_style_text_font(h->title, lv_theme_get_font_normal(shelf), 0);
+    lv_obj_set_style_text_letter_space(h->title, LV_DPX(2), 0);
+    lv_obj_set_style_text_color(h->title, lv_color_hex(0xE8E8EE), 0);
     lv_obj_set_width(h->title, LV_PCT(100));
     lv_label_set_long_mode(h->title, LV_LABEL_LONG_DOT);
     lv_label_set_text(h->title, "");
@@ -401,6 +426,15 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     lv_obj_set_width(h->tagline, LV_PCT(100));
     lv_label_set_long_mode(h->tagline, LV_LABEL_LONG_WRAP);
     lv_label_set_text(h->tagline, "");
+
+    h->desc = lv_label_create(shelf);
+    lv_obj_set_style_text_font(h->desc, lv_theme_get_font_normal(shelf), 0);
+    lv_obj_set_style_text_color(h->desc, lv_color_hex(0xC8CAD2), 0);
+    lv_obj_set_width(h->desc, LV_PCT(75));
+    lv_obj_set_height(h->desc, lv_theme_get_font_normal(shelf)->line_height * 2);
+    lv_label_set_long_mode(h->desc, LV_LABEL_LONG_DOT);
+    lv_label_set_text(h->desc, "");
+    lv_obj_add_flag(h->desc, LV_OBJ_FLAG_HIDDEN);
 
     h->info = lv_label_create(shelf);
     lv_obj_set_style_text_font(h->info, lv_theme_get_font_normal(shelf), 0);
@@ -419,8 +453,9 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     lv_obj_add_event_cb(h->btn_secondary, secondary_click_cb, LV_EVENT_CLICKED, h);
 
     /* quick actions */
-    lv_obj_t *quick = lv_obj_create(view);
+    lv_obj_t *quick = h->quick_box = lv_obj_create(view);
     lv_obj_remove_style_all(quick);
+    lv_obj_add_flag(quick, LV_OBJ_FLAG_HIDDEN); /* actions live in the Ustawienia menu now */
     lv_obj_clear_flag(quick, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(quick, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_pos(quick, LV_DPX(36), LV_PCT(DASH_QUICK_Y_PCT));
@@ -473,6 +508,7 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     lv_obj_clear_flag(scroll, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_set_scroll_dir(scroll, LV_DIR_HOR);
     lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_pad_right(scroll, LV_DPX(30), 0); /* keep the focused tile's outline off the edge */
     lv_obj_set_size(scroll, LV_PCT(100), LV_PCT(100 - DASH_GAMES_Y_PCT));
     lv_obj_set_pos(scroll, 0, LV_PCT(DASH_GAMES_Y_PCT));
 
@@ -480,7 +516,8 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
     lv_obj_add_flag(applist, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_scroll_dir(applist, LV_DIR_NONE);
     lv_obj_set_scrollbar_mode(applist, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_pad_hor(applist, LV_DPX(36), 0);
+    lv_obj_set_style_pad_left(applist, LV_DPX(36), 0);
+    lv_obj_set_style_pad_right(applist, LV_DPX(60), 0);
     lv_obj_set_style_pad_ver(applist, LV_DPX(18), 0);
     lv_obj_set_style_pad_column(applist, LV_DPX(22), 0);
     lv_obj_set_style_radius(applist, 0, 0);
@@ -497,7 +534,7 @@ void dash_home_create(apps_fragment_t *c, lv_obj_t *view) {
 
     lv_obj_update_layout(view);
     lv_coord_t scroll_h = lv_obj_get_height(scroll);
-    h->tile_h = (lv_coord_t) (scroll_h * 0.66f);
+    h->tile_h = (lv_coord_t) (scroll_h * 0.58f);
     h->tile_w = (lv_coord_t) (h->tile_h * 2.14f);
 
     shelf_update(h);
@@ -549,6 +586,7 @@ void dash_home_rebuild(apps_fragment_t *c, const apploader_list_t *list) {
     for (int i = 0; i < list->count; i++) {
         const apploader_item_t *app = &list->items[i];
         if (app->hidden && !c->show_hidden_apps) { continue; }
+        if (steamart_is_builtin(app->base.name)) { continue; } /* Desktop, Steam Big Picture, Remote... */
         if (h->tab == TAB_FAV && !app->fav) { continue; }
         long long ts = recent_ts(h, app->base.name);
         if (h->tab == TAB_RECENT && ts == 0) { continue; }
@@ -592,25 +630,51 @@ void dash_home_tile_size(apps_fragment_t *c, lv_coord_t *w, lv_coord_t *hh) {
 
 /* ------------------------------------------------------------------ tiles */
 
-static void tile_art_cb(lv_obj_t *owner, const lv_img_dsc_t *img, const char *genre, void *userdata) {
-    LV_UNUSED(genre);
-    LV_UNUSED(userdata);
-    if (!img) {
-        lv_obj_add_flag(owner, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
+typedef struct tile_ctx_t {
+    char cover_path[1024];
+    lv_coord_t w, h;
+} tile_ctx_t;
+
+static void tile_show(lv_obj_t *owner, const lv_img_dsc_t *img) {
     lv_img_set_src(owner, img);
     lv_obj_set_pos(owner, 0, 0);
     lv_obj_clear_flag(owner, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void tile_cover_cb(lv_obj_t *owner, const lv_img_dsc_t *img, const char *genre, void *userdata) {
+    LV_UNUSED(genre);
+    LV_UNUSED(userdata);
+    if (img) { tile_show(owner, img); }
+}
+
+static void tile_art_cb(lv_obj_t *owner, const lv_img_dsc_t *img, const char *genre, void *userdata) {
+    LV_UNUSED(genre);
+    tile_ctx_t *ctx = userdata;
+    if (img) {
+        tile_show(owner, img);
+    } else if (ctx) {
+        steamart_request_cover_tile(ctx->cover_path, ctx->w, ctx->h, owner, tile_cover_cb, NULL);
+    }
+    free(ctx);
 }
 
 void dash_home_bind_tile(apps_fragment_t *c, lv_obj_t *item, const apploader_item_t *app) {
     appitem_viewholder_t *holder = lv_obj_get_user_data(item);
     if (!holder || !holder->art) { return; }
     lv_obj_add_flag(holder->art, LV_OBJ_FLAG_HIDDEN);
-    if (steamart_is_builtin(app->base.name)) { return; }
+    tile_ctx_t *ctx = calloc(1, sizeof(tile_ctx_t));
+    char *cache = path_cache();
+    snprintf(ctx->cover_path, sizeof(ctx->cover_path), "%s/%s_%d", cache, (const char *) &c->uuid, app->base.id);
+    free(cache);
+    ctx->w = c->col_width;
+    ctx->h = c->col_height;
+    if (steamart_is_builtin(app->base.name)) {
+        steamart_request_cover_tile(ctx->cover_path, ctx->w, ctx->h, holder->art, tile_cover_cb, NULL);
+        free(ctx);
+        return;
+    }
     steamart_request_sized(app->base.name, STEAMART_HEADER, c->col_width, c->col_height, true, holder->art,
-                           tile_art_cb, NULL);
+                           tile_art_cb, ctx);
 }
 
 /* ------------------------------------------------------------------ shelf */
@@ -638,6 +702,13 @@ static void logo_cb(lv_obj_t *owner, const lv_img_dsc_t *img, const char *genre,
     dash_home_t *h = userdata;
     if (genre && !h->shelf_mode_running) {
         lv_label_set_text(h->tagline, steamart_tagline(h->shelf_name, genre));
+    }
+    char desc[400];
+    if (!h->shelf_mode_running && steamart_get_desc(h->shelf_name, desc, sizeof(desc))) {
+        lv_label_set_text(h->desc, desc);
+        lv_obj_clear_flag(h->desc, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(h->desc, LV_OBJ_FLAG_HIDDEN);
     }
     if (!img) {
         lv_obj_add_flag(owner, LV_OBJ_FLAG_HIDDEN);
@@ -694,16 +765,33 @@ static void quick_update(dash_home_t *h) {
     lv_label_set_text_static(h->quick_sub[3], app_configuration->dash_show_stats ? "Włączone" : "Wyłączone");
 }
 
+static void upper_copy(const char *in, char *out, size_t len) {
+    size_t j = 0;
+    for (size_t i = 0; in[i] && j + 1 < len; i++) {
+        unsigned char ch = (unsigned char) in[i];
+        out[j++] = (char) ((ch >= 'a' && ch <= 'z') ? ch - 32 : ch);
+    }
+    out[j] = '\0';
+}
+
+static int running_app_id(dash_home_t *h) {
+    int running = pcmanager_server_current_app(pcmanager, &h->controller->uuid);
+    if (SDL_getenv("DASH_IGNORE_RUNNING")) { running = 0; } /* dev screenshots only */
+    return running;
+}
+
 static void shelf_update(dash_home_t *h) {
     apps_fragment_t *c = h->controller;
-    int running = pcmanager_server_current_app(pcmanager, &c->uuid);
-    if (SDL_getenv("DASH_IGNORE_RUNNING")) { running = 0; } /* dev screenshots only */
+    int running = running_app_id(h);
     const apploader_item_t *running_app = app_by_id(c, running);
-    const apploader_item_t *app = running_app ? running_app : app_by_id(c, h->focused_app_id);
+    /* the shelf always shows the focused game; before anything is focused, the running one (or the first) */
+    const apploader_item_t *app = app_by_id(c, h->focused_app_id);
+    if (!app) { app = running_app; }
     if (!app && h->visible_count > 0 && c->apploader_apps) {
         app = &c->apploader_apps->items[h->visible[0]];
     }
-    h->shelf_mode_running = running_app != NULL;
+    h->shelf_app_id = app ? app->base.id : 0;
+    h->shelf_mode_running = running_app != NULL && app == running_app;
 
     char info[160];
     info_text(info, sizeof(info));
@@ -713,25 +801,38 @@ static void shelf_update(dash_home_t *h) {
     const char *name = app ? app->base.name : "";
     bool changed = strcmp(name, h->shelf_name) != 0;
     snprintf(h->shelf_name, sizeof(h->shelf_name), "%s", name);
-    lv_label_set_text(h->title, name);
+    char upper[160];
+    upper_copy(name, upper, sizeof(upper));
+    lv_label_set_text(h->title, upper);
 
     if (h->shelf_mode_running) {
+        lv_obj_set_style_bg_color(h->chip, lv_color_hex(0x50DC8C), 0);
+        lv_obj_set_style_text_color(h->chip, lv_color_hex(0x0A1E14), 0);
+        lv_label_set_text_static(h->chip, "DZIA\u0141A NA PC");
         lv_obj_clear_flag(h->chip, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text_static(h->tagline, SDL_strcasecmp(name, "Desktop") == 0 ? "Wróć do pulpitu."
-                                                                                 : "Wróć do gry.");
-        lv_label_set_text_static(h->btn_primary_lbl, "Wznów");
-        lv_label_set_text_static(h->btn_secondary_lbl, "Zakończ grę");
+        lv_label_set_text_static(h->tagline, SDL_strcasecmp(name, "Desktop") == 0 ? "Wr\u00f3\u0107 do pulpitu."
+                                                                                 : "Wr\u00f3\u0107 do gry.");
+        lv_label_set_text_static(h->btn_primary_lbl, "Wzn\u00f3w");
+        lv_label_set_text_static(h->btn_secondary_lbl, "Zako\u0144cz gr\u0119");
     } else {
-        lv_obj_add_flag(h->chip, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(h->tagline, app ? steamart_tagline(name, NULL) : "Wybierz grę.");
+        if (running_app) {
+            lv_obj_set_style_bg_color(h->chip, lv_color_hex(0x3A3C46), 0);
+            lv_obj_set_style_text_color(h->chip, lv_color_hex(0xE8E8EE), 0);
+            lv_label_set_text_fmt(h->chip, "NA PC DZIA\u0141A: %s", running_app->base.name);
+            lv_obj_clear_flag(h->chip, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(h->chip, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_label_set_text(h->tagline, app ? steamart_tagline(name, NULL) : "Wybierz gr\u0119.");
         lv_label_set_text_static(h->btn_primary_lbl, "Graj");
-        lv_label_set_text_static(h->btn_secondary_lbl, "Szczegóły");
+        lv_label_set_text_static(h->btn_secondary_lbl, "Szczeg\u00f3\u0142y");
     }
     if (app) {
         lv_obj_clear_flag(h->btn_primary, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(h->btn_secondary, LV_OBJ_FLAG_HIDDEN);
     }
     if (changed) {
+        lv_obj_add_flag(h->desc, LV_OBJ_FLAG_HIDDEN);
         if (h->art_timer) { lv_timer_del(h->art_timer); }
         h->art_timer = lv_timer_create(art_timer_cb, 220, h);
         lv_timer_set_repeat_count(h->art_timer, 1);
@@ -754,9 +855,83 @@ static void open_settings(void) {
     lv_fragment_manager_push(global->ui.fm, fragment, lv_fragment_get_container(top));
 }
 
+enum {
+    MENU_STREAM_SETTINGS = 1, MENU_WAKE, MENU_DESKTOP, MENU_STATS,
+    MENU_TOOL_BASE = 1000, /* + app id of a built-in host tool */
+};
+
+static void launch_desktop(dash_home_t *h);
+
+static void menu_cancel_cb(lv_event_t *e) {
+    lv_obj_t *target = lv_event_get_target(e);
+    if (target->parent != lv_event_get_current_target(e)) { return; }
+    lv_msgbox_close(lv_event_get_current_target(e)->parent);
+}
+
+static void menu_click_cb(lv_event_t *e) {
+    lv_obj_t *target = lv_event_get_target(e);
+    lv_obj_t *content = lv_event_get_current_target(e);
+    if (target->parent != content) { return; }
+    dash_home_t *h = lv_event_get_user_data(e);
+    intptr_t action = (intptr_t) lv_obj_get_user_data(target);
+    lv_msgbox_close_async(content->parent);
+    switch (action) {
+        case MENU_STREAM_SETTINGS:
+            open_settings();
+            break;
+        case MENU_WAKE:
+            apps_controller_wake(h->controller);
+            break;
+        case MENU_DESKTOP:
+            launch_desktop(h);
+            break;
+        case MENU_STATS:
+            app_configuration->dash_show_stats = !app_configuration->dash_show_stats;
+            settings_save(app_configuration);
+            break;
+        default:
+            if (action >= MENU_TOOL_BASE) {
+                const apploader_item_t *app = app_by_id(h->controller, (int) (action - MENU_TOOL_BASE));
+                if (app) { dash_home_launch(h->controller, app); }
+            }
+            break;
+    }
+}
+
+static void menu_add(lv_obj_t *content, const char *icon, const char *text, intptr_t action) {
+    lv_obj_t *btn = lv_list_add_btn(content, icon, text);
+    lv_btn_set_icon_font(btn, lv_theme_moonlight_get_iconfont_normal(btn));
+    lv_obj_add_flag(btn, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_set_user_data(btn, (void *) action);
+}
+
+static void open_settings_menu(dash_home_t *h) {
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Ustawienia", NULL, NULL, false);
+    lv_obj_t *content = lv_msgbox_get_content(mbox);
+    lv_obj_add_flag(content, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+    lv_obj_add_event_cb(content, menu_cancel_cb, LV_EVENT_CANCEL, h);
+    lv_obj_add_event_cb(content, menu_click_cb, LV_EVENT_SHORT_CLICKED, h);
+    menu_add(content, MAT_SYMBOL_SETTINGS, "Ustawienia streamu", MENU_STREAM_SETTINGS);
+    menu_add(content, MAT_SYMBOL_TV, "Wybud\u017a PC", MENU_WAKE);
+    menu_add(content, MAT_SYMBOL_DESKTOP_WINDOWS, "Pulpit Windows", MENU_DESKTOP);
+    const apploader_list_t *apps = h->controller->apploader_apps;
+    for (int i = 0; apps && i < apps->count; i++) {
+        const apploader_item_t *app = &apps->items[i];
+        if (!steamart_is_builtin(app->base.name) || SDL_strcasecmp(app->base.name, "Desktop") == 0) { continue; }
+        menu_add(content, MAT_SYMBOL_TV, app->base.name, MENU_TOOL_BASE + app->base.id);
+    }
+    menu_add(content, MAT_SYMBOL_VIDEO_SETTINGS, app_configuration->dash_show_stats
+                                                 ? "Statystyki: w\u0142\u0105czone"
+                                                 : "Statystyki: wy\u0142\u0105czone", MENU_STATS);
+    lv_obj_t *cancel = lv_list_add_btn(content, NULL, "Zamknij");
+    lv_obj_add_flag(cancel, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_center(mbox);
+}
+
 static void set_tab(dash_home_t *h, int tab) {
     if (tab == TAB_SETTINGS) {
-        open_settings();
+        open_settings_menu(h);
         return;
     }
     if (tab == h->tab) { return; }
@@ -776,26 +951,63 @@ static void tab_click_cb(lv_event_t *e) {
     }
 }
 
+/* Launch with confirmation when another app is running on the PC (the host would close it). */
+static void confirm_cb(lv_event_t *e) {
+    lv_obj_t *mbox = lv_event_get_current_target(e);
+    dash_home_t *h = lv_event_get_user_data(e);
+    uint16_t btn = lv_msgbox_get_active_btn(mbox);
+    int app_id = (int) (intptr_t) lv_obj_get_user_data(mbox);
+    lv_msgbox_close_async(mbox);
+    if (btn != 0) { return; }
+    const apploader_item_t *app = app_by_id(h->controller, app_id);
+    if (app) { apps_controller_launch(h->controller, app); }
+}
+
+void dash_home_launch(apps_fragment_t *c, const apploader_item_t *app) {
+    dash_home_t *h = home_of(c);
+    if (!h || !app) { return; }
+    int running = running_app_id(h);
+    const apploader_item_t *running_app = app_by_id(c, running);
+    if (!running || running == app->base.id || !running_app) {
+        apps_controller_launch(c, app);
+        return;
+    }
+    static const char *btns[] = {"Zamknij i uruchom", "Anuluj", ""};
+    char text[400];
+    snprintf(text, sizeof(text), "Na PC dzia\u0142a teraz %s.\nZamkn\u0105\u0107 to i uruchomi\u0107 %s?",
+             running_app->base.name, app->base.name);
+    lv_obj_t *mbox = lv_msgbox_create(NULL, "Uruchomi\u0107 inn\u0105 gr\u0119?", text, btns, false);
+    lv_obj_set_user_data(mbox, (void *) (intptr_t) app->base.id);
+    lv_obj_add_event_cb(mbox, confirm_cb, LV_EVENT_VALUE_CHANGED, h);
+    lv_obj_center(mbox);
+}
+
+static void launch_desktop(dash_home_t *h) {
+    apps_fragment_t *c = h->controller;
+    if (!c->apploader_apps) { return; }
+    for (int i = 0; i < c->apploader_apps->count; i++) {
+        const apploader_item_t *app = &c->apploader_apps->items[i];
+        if (SDL_strcasecmp(app->base.name, "Desktop") == 0) {
+            dash_home_launch(c, app);
+            return;
+        }
+    }
+}
+
 static void primary_click_cb(lv_event_t *e) {
     dash_home_t *h = lv_event_get_user_data(e);
-    apps_fragment_t *c = h->controller;
-    int running = pcmanager_server_current_app(pcmanager, &c->uuid);
-    const apploader_item_t *app = app_by_id(c, running ? running : h->focused_app_id);
-    if (!app && h->visible_count > 0 && c->apploader_apps) { app = &c->apploader_apps->items[h->visible[0]]; }
-    if (app) { apps_controller_launch(c, app); }
+    const apploader_item_t *app = app_by_id(h->controller, h->shelf_app_id);
+    if (app) { dash_home_launch(h->controller, app); }
 }
 
 static void secondary_click_cb(lv_event_t *e) {
     dash_home_t *h = lv_event_get_user_data(e);
     apps_fragment_t *c = h->controller;
-    int running = pcmanager_server_current_app(pcmanager, &c->uuid);
-    if (running) {
+    if (h->shelf_mode_running) {
         apps_controller_quit(c);
         return;
     }
-    const apploader_item_t *app = app_by_id(c, h->focused_app_id);
-    if (!app && h->visible_count > 0 && c->apploader_apps) { app = &c->apploader_apps->items[h->visible[0]]; }
-    if (app) { apps_controller_open_menu(c, app->base.id); }
+    if (h->shelf_app_id) { apps_controller_open_menu(c, h->shelf_app_id); }
 }
 
 static void quick_click_cb(lv_event_t *e) {
@@ -838,7 +1050,7 @@ static int row_len(dash_home_t *h, int row) {
     switch (row) {
         case ROW_TABS: return DASH_TABS;
         case ROW_SHELF: return lv_obj_has_flag(h->btn_primary, LV_OBJ_FLAG_HIDDEN) ? 0 : 2;
-        case ROW_QUICK: return DASH_QUICK;
+        case ROW_QUICK: return 0;
         case ROW_GAMES: return h->visible_count > 0 ? 1 : 0;
         default: return 0;
     }

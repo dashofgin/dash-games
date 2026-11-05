@@ -29,8 +29,9 @@
 typedef struct steamart_meta_t {
     char *name;
     int appid;              /* 0 = unknown/not on Steam, -1 = lookup failed (retry later) */
-    char genre[48];
+    char genre[160];        /* all genres, comma separated (Polish names from the store API) */
     char header_url[512];
+    char desc[400];         /* short description in Polish */
 } steamart_meta_t;
 
 /* ---------- decoded textures (UI thread only) ---------- */
@@ -51,6 +52,7 @@ typedef struct steamart_req_t {
     steamart_kind_t kind;
     int w, h;
     bool cover;
+    char *cover_path; /* cover tile mode */
     lv_obj_t *owner;
     steamart_cb_t cb;
     void *userdata;
@@ -58,7 +60,7 @@ typedef struct steamart_req_t {
     /* worker results */
     SDL_Surface *surface;
     bool missing;
-    char genre[48];
+    char genre[160];
     struct steamart_req_t *next;
 } steamart_req_t;
 
@@ -261,16 +263,25 @@ static int lookup_appid(const char *name) {
 
 static void fetch_details(steamart_meta_t *meta) {
     char url[256];
-    snprintf(url, sizeof(url), "https://store.steampowered.com/api/appdetails?appids=%d&filters=basic,genres&l=english",
+    snprintf(url, sizeof(url), "https://store.steampowered.com/api/appdetails?appids=%d&filters=basic,genres&l=polish",
              meta->appid);
     membuf_t buf;
     if (!http_get_mem(url, &buf)) { return; }
     const char *h = json_find_after(buf.data, "\"header_image\":\"");
     if (h) { json_unescape_str(h, meta->header_url, sizeof(meta->header_url)); }
+    const char *sd = json_find_after(buf.data, "\"short_description\":\"");
+    if (sd) { json_unescape_str(sd, meta->desc, sizeof(meta->desc)); }
     const char *g = json_find_after(buf.data, "\"genres\":[");
-    if (g) {
+    meta->genre[0] = '\0';
+    const char *end = g ? strchr(g, ']') : NULL;
+    while (g && end) {
         const char *d = json_find_after(g, "\"description\":\"");
-        if (d) { json_unescape_str(d, meta->genre, sizeof(meta->genre)); }
+        if (!d || d > end) { break; }
+        char one[48];
+        json_unescape_str(d, one, sizeof(one));
+        size_t len = strlen(meta->genre);
+        snprintf(meta->genre + len, sizeof(meta->genre) - len, "%s%s", len ? "," : "", one);
+        g = d;
     }
     free(buf.data);
 }
@@ -295,8 +306,14 @@ static bool meta_load(steamart_meta_t *meta) {
         line[strcspn(line, "\r\n")] = 0;
         snprintf(meta->header_url, sizeof(meta->header_url), "%s", line);
     }
+    bool v2 = false;
+    if (fgets(line, sizeof(line), fp)) {
+        line[strcspn(line, "\r\n")] = 0;
+        v2 = strncmp(line, "v2:", 3) == 0;
+        if (v2) { snprintf(meta->desc, sizeof(meta->desc), "%s", line + 3); }
+    }
     fclose(fp);
-    return true;
+    return v2 || meta->appid == 0;
 }
 
 static void meta_save(const steamart_meta_t *meta) {
@@ -304,7 +321,7 @@ static void meta_save(const steamart_meta_t *meta) {
     meta_file_path(meta->name, path, sizeof(path));
     FILE *fp = fopen(path, "w");
     if (!fp) { return; }
-    fprintf(fp, "%d\n%s\n%s\n", meta->appid, meta->genre, meta->header_url);
+    fprintf(fp, "%d\n%s\n%s\nv2:%s\n", meta->appid, meta->genre, meta->header_url, meta->desc);
     fclose(fp);
 }
 
@@ -346,6 +363,7 @@ static steamart_meta_t meta_resolve(const char *name) {
         found->appid = fresh.appid;
         memcpy(found->genre, fresh.genre, sizeof(found->genre));
         memcpy(found->header_url, fresh.header_url, sizeof(found->header_url));
+        memcpy(found->desc, fresh.desc, sizeof(found->desc));
         snap = *found;
     }
     SDL_UnlockMutex(meta_lock);
@@ -358,6 +376,68 @@ static const char *kind_file(steamart_kind_t kind) {
         case STEAMART_LOGO: return "logo.png";
         default: return "header.jpg";
     }
+}
+
+
+/* ARGB8888 resample of `sr` in src into a w x h surface. Area-average for downscale, bilinear for upscale. */
+static SDL_Surface *resample(SDL_Surface *src, SDL_Rect sr, int w, int h) {
+    SDL_Surface *dst = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!dst || w <= 0 || h <= 0 || sr.w <= 0 || sr.h <= 0) { return dst; }
+    SDL_LockSurface(src);
+    SDL_LockSurface(dst);
+    const Uint8 *sp = src->pixels;
+    Uint8 *dp = dst->pixels;
+    double fx = (double) sr.w / w, fy = (double) sr.h / h;
+    for (int y = 0; y < h; y++) {
+        Uint32 *drow = (Uint32 *) (dp + y * dst->pitch);
+        for (int x = 0; x < w; x++) {
+            double acc[4] = {0, 0, 0, 0}, wsum = 0;
+            if (fx > 1.0 || fy > 1.0) {
+                int x0 = sr.x + (int) (x * fx), x1 = sr.x + (int) ((x + 1) * fx);
+                int y0 = sr.y + (int) (y * fy), y1 = sr.y + (int) ((y + 1) * fy);
+                if (x1 <= x0) { x1 = x0 + 1; }
+                if (y1 <= y0) { y1 = y0 + 1; }
+                for (int yy = y0; yy < y1 && yy < src->h; yy++) {
+                    const Uint32 *srow = (const Uint32 *) (sp + yy * src->pitch);
+                    for (int xx = x0; xx < x1 && xx < src->w; xx++) {
+                        Uint32 c = srow[xx];
+                        double a = (c >> 24) & 0xff;
+                        acc[0] += a;
+                        acc[1] += ((c >> 16) & 0xff) * a;
+                        acc[2] += ((c >> 8) & 0xff) * a;
+                        acc[3] += (c & 0xff) * a;
+                        wsum += 1;
+                    }
+                }
+            } else {
+                double sx = sr.x + (x + 0.5) * fx - 0.5, sy = sr.y + (y + 0.5) * fy - 0.5;
+                int ix = (int) sx, iy = (int) sy;
+                double ax = sx - ix, ay = sy - iy;
+                for (int k = 0; k < 4; k++) {
+                    int xx = LV_CLAMP(0, ix + (k & 1), src->w - 1), yy = LV_CLAMP(0, iy + (k >> 1), src->h - 1);
+                    double wt = ((k & 1) ? ax : 1 - ax) * ((k >> 1) ? ay : 1 - ay);
+                    Uint32 c = ((const Uint32 *) (sp + yy * src->pitch))[xx];
+                    double a = ((c >> 24) & 0xff) * wt;
+                    acc[0] += a;
+                    acc[1] += ((c >> 16) & 0xff) * a;
+                    acc[2] += ((c >> 8) & 0xff) * a;
+                    acc[3] += (c & 0xff) * a;
+                    wsum += wt;
+                }
+            }
+            Uint32 out = 0;
+            if (acc[0] > 0) {
+                Uint32 a = (Uint32) (acc[0] / wsum + 0.5);
+                Uint32 r = (Uint32) (acc[1] / acc[0] + 0.5), g = (Uint32) (acc[2] / acc[0] + 0.5),
+                        bl = (Uint32) (acc[3] / acc[0] + 0.5);
+                out = (LV_MIN(a, 255u) << 24) | (LV_MIN(r, 255u) << 16) | (LV_MIN(g, 255u) << 8) | LV_MIN(bl, 255u);
+            }
+            drow[x] = out;
+        }
+    }
+    SDL_UnlockSurface(dst);
+    SDL_UnlockSurface(src);
+    return dst;
 }
 
 /* Bounding box of pixels with visible alpha (Steam logos often have big transparent margins). */
@@ -411,12 +491,60 @@ static SDL_Surface *scale_surface(SDL_Surface *src, int box_w, int box_h, bool c
         dw = LV_MAX(1, (int) (crop.w * s));
         dh = LV_MAX(1, (int) (crop.h * s));
     }
-    SDL_Surface *dst = SDL_CreateRGBSurfaceWithFormat(0, dw, dh, 32, SDL_PIXELFORMAT_ARGB8888);
-    if (dst) {
-        SDL_SetSurfaceBlendMode(conv, SDL_BLENDMODE_NONE);
-        SDL_BlitScaled(conv, &crop, dst, NULL);
-    }
+    SDL_Surface *dst = resample(conv, crop, dw, dh);
     SDL_FreeSurface(conv);
+    return dst;
+}
+
+/* Cover tile: blurred + darkened full-bleed background, whole cover fitted in the middle. */
+static SDL_Surface *compose_cover_tile(SDL_Surface *src, int w, int h) {
+    SDL_Surface *conv = SDL_ConvertSurfaceFormat(src, SDL_PIXELFORMAT_ARGB8888, 0);
+    SDL_FreeSurface(src);
+    if (!conv) { return NULL; }
+    /* background: crop to the tile aspect, shrink a lot (cheap blur), enlarge back bilinearly */
+    double box_ar = (double) w / h, src_ar = (double) conv->w / conv->h;
+    SDL_Rect crop = {0, 0, conv->w, conv->h};
+    if (src_ar > box_ar) {
+        crop.w = (int) (conv->h * box_ar);
+        crop.x = (conv->w - crop.w) / 2;
+    } else {
+        crop.h = (int) (conv->w / box_ar);
+        crop.y = (conv->h - crop.h) / 2;
+    }
+    SDL_Surface *tiny = resample(conv, crop, LV_MAX(4, w / 28), LV_MAX(3, h / 28));
+    SDL_Rect all_tiny = {0, 0, tiny ? tiny->w : 0, tiny ? tiny->h : 0};
+    SDL_Surface *dst = tiny ? resample(tiny, all_tiny, w, h) : NULL;
+    if (tiny) { SDL_FreeSurface(tiny); }
+    if (!dst) {
+        SDL_FreeSurface(conv);
+        return NULL;
+    }
+    /* darken + force opaque */
+    SDL_LockSurface(dst);
+    for (int y = 0; y < h; y++) {
+        Uint32 *row = (Uint32 *) ((Uint8 *) dst->pixels + y * dst->pitch);
+        for (int x = 0; x < w; x++) {
+            Uint32 c = row[x];
+            Uint32 r = ((c >> 16) & 0xff) * 45 / 100, g = ((c >> 8) & 0xff) * 45 / 100, b = (c & 0xff) * 45 / 100;
+            row[x] = 0xff000000u | (r << 16) | (g << 8) | b;
+        }
+    }
+    SDL_UnlockSurface(dst);
+    /* foreground: whole cover, fitted to 86% of the tile height */
+    int fh = h * 86 / 100, fw = (int) ((double) conv->w * fh / conv->h);
+    if (fw > w * 92 / 100) {
+        fw = w * 92 / 100;
+        fh = (int) ((double) conv->h * fw / conv->w);
+    }
+    SDL_Rect all = {0, 0, conv->w, conv->h};
+    SDL_Surface *fg = resample(conv, all, fw, fh);
+    SDL_FreeSurface(conv);
+    if (fg) {
+        SDL_SetSurfaceBlendMode(fg, SDL_BLENDMODE_BLEND);
+        SDL_Rect at = {(w - fw) / 2, (h - fh) / 2, fw, fh};
+        SDL_BlitSurface(fg, NULL, dst, &at);
+        SDL_FreeSurface(fg);
+    }
     return dst;
 }
 
@@ -424,6 +552,17 @@ static void req_complete_main(void *arg);
 
 static int worker_main(void *arg) {
     steamart_req_t *req = arg;
+    if (req->cover_path) {
+        req->missing = true;
+        for (int i = 0; i < 20 && !file_exists(req->cover_path); i++) { SDL_Delay(500); }
+        SDL_Surface *s = file_exists(req->cover_path) ? IMG_Load(req->cover_path) : NULL;
+        if (s) {
+            req->surface = compose_cover_tile(s, req->w, req->h);
+            req->missing = req->surface == NULL;
+        }
+        app_bus_post(global, req_complete_main, req);
+        return 0;
+    }
     steamart_meta_t meta = meta_resolve(req->name);
     snprintf(req->genre, sizeof(req->genre), "%s", meta.genre);
     req->missing = true;
@@ -581,6 +720,7 @@ static void req_complete_main(void *arg) {
     steamart_req_t *req = arg;
     pending_remove(req);
     steamart_tex_t *t = tex_find(req->name, req->kind, req->w, req->h);
+    if (t && t->missing && req->cover_path && !req->missing) { t = NULL; }
     if (!t) {
         t = tex_insert(req->name, req->kind, req->w, req->h, req->missing ? NULL : req->surface);
     }
@@ -594,6 +734,7 @@ static void req_complete_main(void *arg) {
             req->cb(req->owner, t->missing ? NULL : &t->dsc, req->genre[0] ? req->genre : NULL, req->userdata);
         }
     }
+    free(req->cover_path);
     free(req->name);
     free(req);
 }
@@ -645,7 +786,7 @@ void steamart_request_sized(const char *app_name, steamart_kind_t kind, lv_coord
     steamart_tex_t *t = tex_find(app_name, kind, w, h);
     if (t) {
         /* genre is needed by callers too; it's cheap to read from the meta table */
-        char genre[48] = "";
+        char genre[160] = "";
         SDL_LockMutex(meta_lock);
         for (int i = 0; i < meta_count; i++) {
             if (strcmp(metas[i].name, app_name) == 0) {
@@ -682,6 +823,59 @@ void steamart_request_sized(const char *app_name, steamart_kind_t kind, lv_coord
     }
 }
 
+void steamart_request_cover_tile(const char *cover_path, lv_coord_t w, lv_coord_t h, lv_obj_t *owner,
+                                 steamart_cb_t cb, void *userdata) {
+    if (!meta_lock) { steamart_init(); }
+    char key[600];
+    snprintf(key, sizeof(key), "cover:%s", cover_path);
+    for (steamart_req_t *r = pending; r; r = r->next) {
+        if (r->owner == owner && r->kind == STEAMART_HEADER) { r->superseded = true; }
+    }
+    steamart_tex_t *t = tex_find(key, STEAMART_HEADER, w, h);
+    if (t && !t->missing) {
+        t->last_used = ++use_clock;
+        cb(owner, &t->dsc, NULL, userdata);
+        return;
+    }
+    steamart_req_t *req = calloc(1, sizeof(steamart_req_t));
+    req->name = str_dup(key);
+    req->cover_path = str_dup(cover_path);
+    req->kind = STEAMART_HEADER;
+    req->w = w;
+    req->h = h;
+    req->owner = owner;
+    req->cb = cb;
+    req->userdata = userdata;
+    if (!owner_has_pending(owner)) {
+        lv_obj_add_event_cb(owner, owner_deleted_cb, LV_EVENT_DELETE, NULL);
+    }
+    req->next = pending;
+    pending = req;
+    SDL_Thread *th = SDL_CreateThread(worker_main, "steamart", req);
+    if (th) {
+        SDL_DetachThread(th);
+    } else {
+        pending_remove(req);
+        free(req->cover_path);
+        free(req->name);
+        free(req);
+    }
+}
+
+bool steamart_get_desc(const char *app_name, char *out, size_t len) {
+    out[0] = '\0';
+    if (!meta_lock) { return false; }
+    SDL_LockMutex(meta_lock);
+    for (int i = 0; i < meta_count; i++) {
+        if (strcmp(metas[i].name, app_name) == 0) {
+            snprintf(out, len, "%s", metas[i].desc);
+            break;
+        }
+    }
+    SDL_UnlockMutex(meta_lock);
+    return out[0] != '\0';
+}
+
 /* ---------------------------------------------------------------- taglines */
 
 typedef struct tagline_t {
@@ -703,20 +897,31 @@ static const tagline_t known_taglines[] = {
         {NULL,               NULL},
 };
 
-/* Steam genres (English descriptions) */
-static const tagline_t genre_taglines[] = {
-        {"Racing",                "Gaz do dechy."},
-        {"Sports",                "Twoja kolej na boisku."},
-        {"RPG",                   "Przygoda czeka."},
-        {"Action",                "Akcja zaczyna się teraz."},
-        {"Adventure",             "Przygoda czeka."},
-        {"Strategy",              "Czas na wielki plan."},
-        {"Simulation",            "Wszystko pod kontrolą."},
-        {"Casual",                "Na chwilę relaksu."},
-        {"Indie",                 "Mała gra, wielka frajda."},
-        {"Massively Multiplayer", "Ekipa już czeka."},
-        {NULL,                    NULL},
+/* Genre taglines in priority order (a racing game that is also "Action" gets a racing line). */
+typedef struct genre_lines_t {
+    const char *pl, *en;
+    const char *lines[3];
+} genre_lines_t;
+
+static const genre_lines_t genre_lines[] = {
+        {"Wy\u015bcigowe",      "Racing",                {"Gaz do dechy.", "Na start, gotowi, jazda.", "Pora na szybkie okr\u0105\u017cenie."}},
+        {"Sportowe",           "Sports",                {"Twoja kolej na boisku.", "Mecz si\u0119 zaczyna.", "Wejd\u017a do gry."}},
+        {"Symulacje",          "Simulation",            {"Wszystko pod kontrol\u0105.", "Twoje zasady, tw\u00f3j \u015bwiat.", "Jeszcze tylko jedna zmiana."}},
+        {"Strategie",          "Strategy",              {"Czas na wielki plan.", "Ka\u017cdy ruch ma znaczenie.", "Imperium samo si\u0119 nie zbuduje."}},
+        {"RPG",                "RPG",                   {"Przygoda czeka.", "Twoja historia trwa.", "Wr\u00f3\u0107 do swojej dru\u017cyny."}},
+        {"MMO",                "Massively Multiplayer", {"Ekipa ju\u017c czeka.", "Serwer czeka na ciebie.", "Do\u0142\u0105cz do reszty."}},
+        {"Przygodowe",         "Adventure",             {"Przygoda czeka.", "Co jest za nast\u0119pnym zakr\u0119tem?", "Ruszaj dalej."}},
+        {"Akcja",              "Action",                {"Akcja zaczyna si\u0119 teraz.", "Czas na rozgrywk\u0119.", "Pe\u0142na moc."}},
+        {"Swobodne",           "Casual",                {"Na chwil\u0119 relaksu.", "Spokojna partyjka.", "Odpocznij przy grze."}},
+        {"Niezale\u017cne",     "Indie",                 {"Ma\u0142a gra, wielka frajda.", "Odkryj co\u015b nowego.", "Ma\u0142a gra, wielka przygoda."}},
+        {NULL,                 NULL,                    {NULL, NULL, NULL}},
 };
+
+static unsigned long tag_hash(const char *s) {
+    unsigned long h = 5381;
+    for (; *s; s++) { h = ((h << 5) + h) + (unsigned char) *s; }
+    return h;
+}
 
 const char *steamart_tagline(const char *app_name, const char *genre) {
     char norm[256];
@@ -725,9 +930,11 @@ const char *steamart_tagline(const char *app_name, const char *genre) {
         if (strstr(norm, known_taglines[i].key)) { return known_taglines[i].text; }
     }
     if (SDL_strcasecmp(app_name, "Desktop") == 0) { return "Twój pulpit na dużym ekranie."; }
-    if (genre) {
-        for (int i = 0; genre_taglines[i].key; i++) {
-            if (SDL_strcasecmp(genre, genre_taglines[i].key) == 0) { return genre_taglines[i].text; }
+    if (genre && genre[0]) {
+        for (int i = 0; genre_lines[i].pl; i++) {
+            if (strstr(genre, genre_lines[i].pl) || strstr(genre, genre_lines[i].en)) {
+                return genre_lines[i].lines[tag_hash(app_name) % 3];
+            }
         }
     }
     return "Gotowy do gry.";

@@ -51,7 +51,8 @@ lv_obj_t *launcher_win_create(lv_fragment_t *self, lv_obj_t *parent) {
     lv_obj_add_event_cb(detail, detail_group_add, LV_EVENT_CHILD_CREATED, controller);
 
     lv_obj_set_grid_cell(nav, LV_GRID_ALIGN_STRETCH, 0, 2, LV_GRID_ALIGN_STRETCH, 0, 1);
-    lv_obj_set_grid_cell(detail, LV_GRID_ALIGN_STRETCH, 1, 2, LV_GRID_ALIGN_STRETCH, 0, 1);
+    // Dash Games: the home covers the whole screen; the nav is a drawer revealed by sliding the detail away
+    lv_obj_set_grid_cell(detail, LV_GRID_ALIGN_STRETCH, 0, 3, LV_GRID_ALIGN_STRETCH, 0, 1);
     lv_obj_clear_flag(detail, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_set_style_pad_row(nav, 0, 0);
@@ -71,7 +72,7 @@ lv_obj_t *launcher_win_create(lv_fragment_t *self, lv_obj_t *parent) {
     lv_obj_set_style_shadow_opa(detail, LV_OPA_MAX, 0);
     lv_obj_set_style_shadow_width(detail, lv_dpx(5), 0);
     lv_obj_set_style_border_width(detail, 0, 0);
-    lv_obj_set_style_translate_x(detail, lv_dpx(NAV_TRANSLATE_OFFSET), 0);
+    lv_obj_set_style_translate_x(detail, lv_dpx(NAV_WIDTH_EXPANDED), 0);
     lv_obj_set_style_translate_x(detail, 0, LV_STATE_USER_1);
 
     lv_obj_t *title = lv_obj_create(nav);

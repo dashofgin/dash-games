@@ -100,7 +100,7 @@ if (TARGET_WEBOS)
     set(THREADS_PTHREAD_ARG "2" CACHE STRING "Result from TRY_RUN" FORCE)
     set(OS_LINUX TRUE)
 
-    set(WEBOS_APPINFO_ID "com.limelight.webos.fix")
+    set(WEBOS_APPINFO_ID "com.dashgames.tv")
     set(CMAKE_INSTALL_RPATH "$ORIGIN/lib/backports:$ORIGIN/../lib/backports:$ORIGIN")
 elseif (TARGET_STEAMLINK)
     set(OS_LINUX TRUE)

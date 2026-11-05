@@ -15,43 +15,49 @@ static void appitem_deselected(lv_event_t *e);
 
 lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
     appitem_styles_t *styles = &controller->appitem_style;
-    lv_obj_t *item = lv_img_create(parent);
-    lv_obj_add_flag(item, LV_OBJ_FLAG_EVENT_BUBBLE | LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_coord_t tile_w = controller->col_width, tile_h = controller->col_height;
+    const lv_font_t *name_font = lv_theme_get_font_normal(parent);
+    lv_coord_t name_h = name_font->line_height + LV_DPX(10);
+
+    /* Dash Games: the item is a transparent container (tile + name under it) */
+    lv_obj_t *item = lv_obj_create(parent);
+    lv_obj_remove_style_all(item);
+    lv_obj_add_flag(item, LV_OBJ_FLAG_EVENT_BUBBLE | LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_OVERFLOW_VISIBLE);
     lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_style(item, &styles->cover, 0);
-    lv_obj_set_size(item, controller->col_width, controller->col_height);
-
-    lv_obj_set_style_outline_opa(item, LV_OPA_COVER, LV_STATE_FOCUS_KEY);
-
-    lv_obj_set_style_transform_pivot_x(item, controller->col_width / 2, 0);
-    lv_obj_set_style_transform_pivot_y(item, controller->col_height / 2, 0);
-
-    lv_obj_set_style_transform_zoom(item, 256 * 99 / 100, LV_STATE_PRESSED);
-    // Dash Games: tvOS-like lift on focus (scale + soft shadow + thin white outline)
-    lv_obj_set_style_transform_zoom(item, 256 * 110 / 100, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_color(item, lv_color_black(), LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_opa(item, LV_OPA_60, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_width(item, LV_DPX(28), LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_shadow_ofs_y(item, LV_DPX(10), LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_transition(item, &styles->tr_pressed, LV_STATE_PRESSED | LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_transition(item, &styles->tr_released, LV_STATE_DEFAULT);
-    lv_obj_add_event_cb(item, appitem_draw_decor, LV_EVENT_DRAW_MAIN, styles);
+    lv_obj_set_size(item, tile_w, tile_h + name_h);
     lv_obj_add_event_cb(item, appitem_selected, LV_EVENT_FOCUSED, NULL);
     lv_obj_add_event_cb(item, appitem_deselected, LV_EVENT_DEFOCUSED, NULL);
 
-    lv_obj_t *art = lv_img_create(item);
+    lv_obj_t *cover = lv_img_create(item);
+    lv_obj_add_flag(cover, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_clear_flag(cover, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_style(cover, &styles->cover, 0);
+    lv_obj_set_size(cover, tile_w, tile_h);
+    lv_obj_set_pos(cover, 0, 0);
+    lv_img_set_antialias(cover, true);
+    lv_obj_set_style_outline_opa(cover, LV_OPA_COVER, LV_STATE_FOCUS_KEY);
+    /* tvOS-like lift without scaling (scaling made the edges jagged on the TV) */
+    lv_obj_set_style_translate_y(cover, -LV_DPX(6), LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_color(cover, lv_color_black(), LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_opa(cover, LV_OPA_70, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_width(cover, LV_DPX(30), LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_shadow_ofs_y(cover, LV_DPX(12), LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_transition(cover, &styles->tr_pressed, LV_STATE_PRESSED | LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_transition(cover, &styles->tr_released, LV_STATE_DEFAULT);
+    lv_obj_add_event_cb(cover, appitem_draw_decor, LV_EVENT_DRAW_MAIN, styles);
+
+    lv_obj_t *art = lv_img_create(cover);
     lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(art, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_EVENT_BUBBLE);
-    lv_obj_set_style_radius(art, LV_DPX(10), 0);
-    lv_obj_set_style_clip_corner(art, true, 0);
+    lv_img_set_antialias(art, true);
 
-    lv_obj_t *play_indicator = lv_label_create(item);
+    lv_obj_t *play_indicator = lv_label_create(cover);
     lv_obj_clear_flag(play_indicator, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_style_all(play_indicator);
     lv_obj_add_style(play_indicator, &styles->btn, 0);
     lv_label_set_text(play_indicator, MAT_SYMBOL_PLAY_ARROW);
-    lv_obj_center(play_indicator);
-    lv_obj_t *title = lv_label_create(item);
+    lv_obj_align(play_indicator, LV_ALIGN_TOP_RIGHT, -LV_DPX(10), LV_DPX(10));
+    lv_obj_t *title = lv_label_create(cover);
     const lv_font_t *font = lv_theme_get_font_small(item);
     lv_obj_set_style_text_font(title, font, 0);
     lv_obj_set_size(title, LV_PCT(100), lv_obj_get_style_text_font(title, 0)->line_height + LV_DPX(2));
@@ -59,6 +65,14 @@ lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
     lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
     lv_obj_set_style_pad_hor(title, LV_DPX(5), 0);
     lv_obj_align(title, LV_ALIGN_BOTTOM_MID, 0, -lv_dpx(20));
+
+    lv_obj_t *name = lv_label_create(item);
+    lv_obj_set_style_text_font(name, name_font, 0);
+    lv_obj_set_style_text_color(name, lv_color_hex(0x9A9CA6), 0);
+    lv_obj_set_size(name, tile_w, name_font->line_height);
+    lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+    lv_label_set_text(name, "");
+    lv_obj_set_pos(name, LV_DPX(2), tile_h + LV_DPX(8));
 
     appitem_viewholder_t *holder = (appitem_viewholder_t *) malloc(sizeof(appitem_viewholder_t));
     memset(holder, 0, sizeof(appitem_viewholder_t));
@@ -68,7 +82,10 @@ lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
     holder->play_indicator = play_indicator;
     holder->title = title;
     holder->art = art;
+    holder->cover = cover;
+    holder->name = name;
     lv_obj_set_user_data(item, holder);
+    lv_obj_set_user_data(cover, holder);
     lv_obj_add_event_cb(item, appitem_holder_free_cb, LV_EVENT_DELETE, holder);
     return item;
 }
@@ -76,13 +93,13 @@ lv_obj_t *appitem_view(apps_fragment_t *controller, lv_obj_t *parent) {
 void appitem_style_init(appitem_styles_t *style) {
     lv_style_init(&style->cover);
     lv_style_set_pad_all(&style->cover, 0);
-    lv_style_set_radius(&style->cover, LV_DPX(10));
+    lv_style_set_radius(&style->cover, LV_DPX(14));
     lv_style_set_clip_corner(&style->cover, true);
-    lv_style_set_shadow_opa(&style->cover, LV_OPA_40);
+    lv_style_set_shadow_opa(&style->cover, LV_OPA_30);
     lv_style_set_shadow_width(&style->cover, LV_DPX(15));
     lv_style_set_shadow_ofs_y(&style->cover, LV_DPX(3));
     lv_style_set_outline_color(&style->cover, lv_color_white());
-    lv_style_set_outline_width(&style->cover, LV_DPX(2));
+    lv_style_set_outline_width(&style->cover, LV_DPX(3));
     lv_style_set_outline_opa(&style->cover, LV_OPA_TRANSP);
     lv_style_set_outline_pad(&style->cover, LV_DPX(3));
 
@@ -103,7 +120,7 @@ void appitem_style_init(appitem_styles_t *style) {
     lv_style_set_pad_ver(&style->btn, LV_DPX(10));
 
     static const lv_style_prop_t trans_props[] = {
-            LV_STYLE_OUTLINE_OPA, LV_STYLE_TRANSFORM_WIDTH, LV_STYLE_TRANSFORM_HEIGHT, LV_STYLE_TRANSFORM_ZOOM, 0
+            LV_STYLE_OUTLINE_OPA, LV_STYLE_TRANSLATE_Y, LV_STYLE_SHADOW_OPA, LV_STYLE_SHADOW_OFS_Y, 0
     };
     lv_style_transition_dsc_init(&style->tr_pressed, trans_props, lv_anim_path_linear, LV_THEME_DEFAULT_TRANSITON_TIME,
                                  0, NULL);
@@ -156,6 +173,8 @@ static void appitem_selected(lv_event_t *e) {
     lv_obj_t *item = lv_event_get_current_target(e);
     appitem_viewholder_t *holder = lv_obj_get_user_data(item);
     lv_label_set_long_mode(holder->title, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_add_state(holder->cover, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_text_color(holder->name, lv_color_white(), 0);
     apps_controller_hero_update(holder->controller, holder->app_id);
     lv_obj_scroll_to_view_recursive(item, LV_ANIM_ON);
 }
@@ -164,4 +183,6 @@ static void appitem_deselected(lv_event_t *e) {
     lv_obj_t *item = lv_event_get_current_target(e);
     appitem_viewholder_t *holder = lv_obj_get_user_data(item);
     lv_label_set_long_mode(holder->title, LV_LABEL_LONG_DOT);
+    lv_obj_clear_state(holder->cover, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_text_color(holder->name, lv_color_hex(0x9A9CA6), 0);
 }

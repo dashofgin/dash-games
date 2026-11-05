@@ -33,5 +33,8 @@ void dash_home_focus_app(apps_fragment_t *controller, int app_id);
 /** Called when a tile is bound to an app: loads the landscape Steam header into the tile. */
 void dash_home_bind_tile(apps_fragment_t *controller, lv_obj_t *item, const apploader_item_t *app);
 
+/** Launch (or resume) an app; asks for confirmation if a different app is running on the PC. */
+void dash_home_launch(apps_fragment_t *controller, const apploader_item_t *app);
+
 /** Remember that an app was launched (for the "Ostatnie" tab). */
 void dash_home_record_launch(apps_fragment_t *controller, const apploader_item_t *app);

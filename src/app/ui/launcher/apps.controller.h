@@ -57,6 +57,8 @@ typedef struct {
     lv_obj_t *play_indicator;
     lv_obj_t *title;
     lv_obj_t *art; /* Dash Games: landscape Steam header over the cover */
+    lv_obj_t *cover; /* Dash Games: rounded tile image (the item itself is a container) */
+    lv_obj_t *name;  /* Dash Games: game name under the tile */
 } appitem_viewholder_t;
 
 typedef struct {

@@ -282,7 +282,8 @@ static void update_grid_config(apps_fragment_t *controller) {
     lv_coord_t width = count * tile_w + (count - 1) * lv_obj_get_style_pad_column(applist, 0) +
                        lv_obj_get_style_pad_left(applist, 0) + lv_obj_get_style_pad_right(applist, 0);
     lv_obj_set_width(applist, width);
-    lv_gridview_set_config(applist, count, tile_h, LV_GRID_ALIGN_CENTER, LV_GRID_ALIGN_CENTER);
+    lv_coord_t row_h = tile_h + lv_theme_get_font_normal(applist)->line_height + LV_DPX(10);
+    lv_gridview_set_config(applist, count, row_h, LV_GRID_ALIGN_START, LV_GRID_ALIGN_START);
 
     controller->appitem_style.defcover_src.header.w = tile_w;
     controller->appitem_style.defcover_src.header.h = tile_h;
@@ -332,6 +333,7 @@ static void on_host_updated(const uuidstr_t *uuid, void *userdata) {
         apploader_load(controller->apploader);
     }
     update_view_state(controller);
+    dash_home_focus_app(controller, 0);
 }
 
 static void on_host_removed(const uuidstr_t *uuid, void *userdata) {
@@ -538,9 +540,10 @@ static void appload_errored(int code, const char *error, void *userdata) {
 static void appitem_bind(apps_fragment_t *controller, lv_obj_t *item, apploader_item_t *app) {
     appitem_viewholder_t *holder = lv_obj_get_user_data(item);
 
-    coverloader_display(controller->coverloader, &controller->uuid, app->base.id, item,
+    coverloader_display(controller->coverloader, &controller->uuid, app->base.id, holder->cover,
                         controller->col_width, controller->col_height);
     lv_label_set_text(holder->title, app->base.name);
+    lv_label_set_text(holder->name, app->base.name);
     dash_home_bind_tile(controller, item, app);
 
     int current_id = pcmanager_server_current_app(pcmanager, &controller->uuid);
@@ -561,16 +564,9 @@ static void item_click_cb(lv_event_t *event) {
         return;
     }
     appitem_viewholder_t *holder = (appitem_viewholder_t *) lv_obj_get_user_data(target);
-    int current_app = pcmanager_server_current_app(pcmanager, &controller->uuid);
-    if (current_app != 0) {
-        if (holder->app_id == current_app) {
-            open_context_menu(controller, holder);
-        }
-        return;
-    }
     const apploader_item_t *item = apploader_list_item_by_id(controller->apploader_apps, holder->app_id);
-    assert(item != NULL);
-    launcher_launch_game(holder->controller, item);
+    if (item == NULL) { return; }
+    dash_home_launch(holder->controller, item);
 }
 
 static void item_longpress_cb(lv_event_t *event) {

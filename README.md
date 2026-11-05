@@ -1,41 +1,56 @@
-# Moonlight TV
+<img src="docs/dash/icon.png" width="96" align="right" alt="Dash Games icon">
 
-Moonlight TV is a community version of [Moonlight GameStream Client](https://moonlight-stream.org/), made for large
-screens. It works on LG webOS powered TVs, and Raspberry Pi running Raspbian.
+# Dash Games
 
-![Download Stats](https://img.shields.io/github/downloads/mariotaku/moonlight-tv/total)
+**Dash Games** is a game streaming app for LG webOS TVs, based on [Moonlight TV](https://github.com/mariotaku/moonlight-tv). It streams games from your PC (Sunshine / Apollo / Vibepollo) to the TV, with a home screen modelled on Apple TV.
 
-## Features
+![Home screen](docs/dash/home.png)
 
-* High performance streaming for webOS
-* UI optimized for large screen and remote controller
-* Supports up to 4 controllers
-* Easy to port to other OSes (Now runs on macOS, Arch, Debian, Raspbian and Windows)
+## Compared to Moonlight TV
 
-## Screenshots
+**Audio fix for Vibepollo 2.0.3+**
+- Moonlight TV always asks the host for `continuousAudio`. On Vibepollo 2.0.3 and newer this produces crackling, "robotic" audio.
+- Dash Games doesn't send that request, so the audio is clean.
+- Background: [Nonary/Vibepollo#703](https://github.com/Nonary/Vibepollo/issues/703). Upstream fix: [mariotaku/moonlight-tv#641](https://github.com/mariotaku/moonlight-tv/pull/641).
 
-![Launcher](https://user-images.githubusercontent.com/830358/141690137-529d3b94-b56a-4f24-a3c5-00a56eb30952.png)
+**Home screen**
+- Full-screen Steam artwork for the selected game, with the game's logo and a short tagline.
+- A short description from the Steam store, in Polish where available.
+- A row of game tiles using Steam artwork, with the game name under each tile.
+- Apps that have no Steam artwork get a tile built from their own cover, placed on a blurred background.
 
-![Settings](https://user-images.githubusercontent.com/830358/147389849-6907f614-dbd4-4c24-987e-1a214a9680d0.png)
+**Tabs**
+- **Gry** (games), **Ostatnie** (recently played), **Ulubione** (favourites).
+- **Ustawienia** (settings) opens a menu with: stream settings, wake the PC, Windows desktop, Steam Big Picture, Remote Input / Monitor, and a toggle for connection stats.
 
-![In-game Overlay](https://user-images.githubusercontent.com/830358/141690146-27ee2564-0cc8-43ef-a5b0-54b8487dda1e.png)
-_Screenshot performed on TV has lower picture quality. Actual picture quality is better._
+**Safer launching**
+- When a game is already running on the PC, the home screen shows **Wznów / Zakończ grę** (resume / quit game).
+- Starting a different game first asks you to confirm.
 
-## Download
+**During a stream**
+- Long-press BACK to open the overlay. It now has a **Settings** button.
+- Connection stats can stay visible while you play.
 
-### For webOS
+**Defaults:** 4K, 60 FPS, HEVC, 80 Mb/s.
 
-[Easy installation with dev-manager-desktop](https://github.com/webosbrew/dev-manager-desktop) (recommended)
+![Game details](docs/dash/home2.png)
+![Settings menu](docs/dash/menu.png)
 
-Or download IPK from [Latest release](https://github.com/mariotaku/moonlight-tv/releases/latest)
+## Installation
 
-### For Raspbian
+1. Your TV needs Developer Mode or Homebrew Channel.
+2. Download the `.ipk` file from [Releases](../../releases).
+3. Install it with `ares-install com.dashgames.tv_*.ipk`, or through webOS Dev Manager.
 
-Download DEB from [Latest release](https://github.com/mariotaku/moonlight-tv/releases/latest)
+The app installs next to Moonlight TV as a separate app (`com.dashgames.tv`). The first time you connect, you pair it with the host using a PIN.
 
-## [Documentations](https://github.com/mariotaku/moonlight-tv/wiki)
+## Building
 
-## Credits
+Builds use GitHub Actions (the `Build (webOS)` workflow).
 
-* [moonlight-embedded](https://github.com/irtimmer/moonlight-embedded), for original libgamestream and decoder
-  components
+## License and credits
+
+- Based on [Moonlight TV](https://github.com/mariotaku/moonlight-tv) by Mariotaku and contributors, and licensed, like the original, under **GPL-3.0** (see `LICENSE`).
+- The original README is in [docs/README.moonlight-tv.md](docs/README.moonlight-tv.md).
+- Icons come from [Material Symbols](https://fonts.google.com/icons) (Apache 2.0).
+- Game artwork is downloaded from the Steam store at runtime. It is not included in this repository.

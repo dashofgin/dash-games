@@ -17,7 +17,7 @@ typedef struct {
     lv_obj_t *progress;
     lv_obj_t *video;
     lv_obj_t *actions;
-    lv_obj_t *kbd_btn, *vmouse_btn;
+    lv_obj_t *kbd_btn, *vmouse_btn, *settings_btn;
     lv_obj_t *suspend_btn, *quit_btn;
     lv_obj_t *stats;
     struct {

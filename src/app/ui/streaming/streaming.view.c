@@ -1,3 +1,4 @@
+#include "ui/dash_theme.h"
 #include "streaming.controller.h"
 
 #include "util/i18n.h"
@@ -87,6 +88,16 @@ lv_obj_t *streaming_scene_create(lv_fragment_t *self, lv_obj_t *parent) {
     lv_obj_add_style(vmouse_label, &controller->overlay_button_label_style, 0);
     lv_label_set_text(vmouse_label, locstr("Virtual Mouse"));
 
+    // Dash Games: open settings straight from the stream overlay
+    lv_obj_t *settings_btn = lv_btn_create(actions);
+    lv_obj_add_flag(settings_btn, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_style(settings_btn, &controller->overlay_button_style, 0);
+    lv_obj_add_style(settings_btn, &controller->overlay_button_style_focused, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_bg_color(settings_btn, lv_color_hex(DASH_COLOR_SECONDARY), 0);
+    lv_obj_t *settings_lbl = lv_label_create(settings_btn);
+    lv_obj_add_style(settings_lbl, &controller->overlay_button_label_style, 0);
+    lv_label_set_text(settings_lbl, locstr("Settings"));
+
     lv_obj_t *actions_spacing = lv_obj_create(actions);
     lv_obj_remove_style_all(actions_spacing);
     lv_obj_set_flex_grow(actions_spacing, 1);
@@ -140,6 +151,7 @@ lv_obj_t *streaming_scene_create(lv_fragment_t *self, lv_obj_t *parent) {
     controller->actions = actions;
     controller->kbd_btn = kbd_btn;
     controller->vmouse_btn = vmouse_btn;
+    controller->settings_btn = settings_btn;
     controller->quit_btn = exit_btn;
     controller->suspend_btn = suspend_btn;
     controller->stats = stats;

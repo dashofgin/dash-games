@@ -40,6 +40,9 @@ typedef struct {
 
     lv_obj_t *quit_progress;
 
+    /* Dash Games: hero header with the focused game */
+    lv_obj_t *hero, *hero_title, *hero_info;
+
     appitem_styles_t appitem_style;
     int col_count;
     lv_coord_t col_width, col_height;
@@ -61,3 +64,5 @@ typedef struct {
 } apps_fragment_arg_t;
 
 extern const lv_fragment_class_t apps_controller_class;
+
+void apps_controller_hero_update(apps_fragment_t *controller, int app_id);

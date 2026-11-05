@@ -3,6 +3,7 @@
 //
 
 #include "app.h"
+#include "ui/dash_theme.h"
 #include "appitem.view.h"
 #include "apps.controller.h"
 #include "launcher.controller.h"
@@ -182,6 +183,31 @@ static lv_obj_t *apps_view(lv_fragment_t *self, lv_obj_t *container) {
     lv_obj_set_size(view, LV_PCT(100), LV_PCT(100));
     lv_obj_set_scroll_dir(view, LV_DIR_NONE);
 
+    // Dash Games hero header: big title of the focused game, stream settings, hints
+    lv_obj_t *hero = controller->hero = lv_obj_create(view);
+    lv_obj_remove_style_all(hero);
+    lv_obj_clear_flag(hero, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(hero, LV_PCT(100), LV_PCT(DASH_HERO_HEIGHT_PCT));
+    lv_obj_align(hero, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_style_pad_hor(hero, lv_dpx(28), 0);
+    lv_obj_set_style_pad_top(hero, lv_dpx(22), 0);
+    lv_obj_set_flex_flow(hero, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(hero, lv_dpx(6), 0);
+    lv_obj_t *hero_title = controller->hero_title = lv_label_create(hero);
+    lv_obj_set_width(hero_title, LV_PCT(100));
+    lv_label_set_long_mode(hero_title, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(hero_title, lv_theme_get_font_large(hero), 0);
+    lv_obj_set_style_text_color(hero_title, lv_color_white(), 0);
+    lv_label_set_text(hero_title, "");
+    lv_obj_t *hero_info = controller->hero_info = lv_label_create(hero);
+    lv_obj_set_style_text_font(hero_info, lv_theme_get_font_small(hero), 0);
+    lv_obj_set_style_text_color(hero_info, lv_color_hex(DASH_COLOR_PRIMARY), 0);
+    lv_obj_t *hero_hint = lv_label_create(hero);
+    lv_obj_set_style_text_font(hero_hint, lv_theme_get_font_small(hero), 0);
+    lv_obj_set_style_text_color(hero_hint, lv_color_hex(DASH_COLOR_MUTED), 0);
+    lv_label_set_text(hero_hint, "OK: graj    •    przytrzymaj OK: więcej opcji");
+    apps_controller_hero_update(controller, 0);
+
     lv_obj_t *applist = controller->applist = lv_gridview_create(view);
     lv_obj_add_flag(applist, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_scroll_dir(applist, LV_DIR_VER);
@@ -191,7 +217,8 @@ static lv_obj_t *apps_view(lv_fragment_t *self, lv_obj_t *container) {
     lv_obj_set_style_radius(applist, 0, 0);
     lv_obj_set_style_border_side(applist, LV_BORDER_SIDE_NONE, 0);
     lv_obj_set_style_bg_opa(applist, 0, 0);
-    lv_obj_set_size(applist, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_size(applist, LV_PCT(100), LV_PCT(100 - DASH_HERO_HEIGHT_PCT));
+    lv_obj_align(applist, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     lv_obj_update_layout(applist);
 
     lv_gridview_set_adapter(applist, &apps_adapter);
@@ -276,7 +303,7 @@ static void update_grid_config(apps_fragment_t *controller) {
     lv_obj_t *applist = controller->applist;
     lv_obj_update_layout(applist);
     lv_coord_t applist_width = lv_obj_get_width(applist);
-    int col_count = LV_CLAMP(2, applist_width / lv_dpx(120), 5);
+    int col_count = LV_CLAMP(3, applist_width / lv_dpx(150), 5);
     lv_coord_t col_width = (applist_width - lv_obj_get_style_pad_left(applist, 0) -
                             lv_obj_get_style_pad_right(applist, 0) -
                             lv_obj_get_style_pad_column(applist, 0) * (col_count - 1)) / col_count;
@@ -825,4 +852,34 @@ static lv_gridview_data_change_t *apps_list_detect_change(const apploader_list_t
     }
     *num_changes = 0;
     return NULL;
+}
+
+static const char *dash_resolution_name(int width, int height) {
+    static char buf[24];
+    switch (height) {
+        case 2160: return "4K";
+        case 1440: return "1440p";
+        case 1080: return "1080p";
+        case 720: return "720p";
+        default:
+            snprintf(buf, sizeof(buf), "%dx%d", width, height);
+            return buf;
+    }
+}
+
+void apps_controller_hero_update(apps_fragment_t *controller, int app_id) {
+    if (controller == NULL || controller->hero_title == NULL) { return; }
+    const apploader_item_t *app = NULL;
+    if (app_id != 0 && controller->apploader_apps != NULL) {
+        app = apploader_list_item_by_id(controller->apploader_apps, app_id);
+    }
+    if (app != NULL) {
+        lv_label_set_text(controller->hero_title, app->base.name);
+    }
+    const STREAM_CONFIGURATION *stream = &app_configuration->stream;
+    const char *codec = app_configuration->av1 ? "AV1" : app_configuration->hevc ? "HEVC" : "H.264";
+    const char *audio = app_configuration->audio_backend ? app_configuration->audio_backend : "auto";
+    lv_label_set_text_fmt(controller->hero_info, "%s%d  •  %s  •  %d Mb/s  •  audio: %s",
+                          dash_resolution_name(stream->width, stream->height), stream->fps, codec,
+                          stream->bitrate / 1000, audio);
 }

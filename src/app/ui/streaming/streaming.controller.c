@@ -1,6 +1,7 @@
 #include "app.h"
 #include "app_session.h"
 #include "streaming.controller.h"
+#include "ui/settings/settings.controller.h"
 #include "stream/video/session_video.h"
 #include "ui/root.h"
 #include "ui/common/progress_dialog.h"
@@ -13,6 +14,13 @@
 static void exit_streaming(lv_event_t *event);
 
 static void suspend_streaming(lv_event_t *event);
+
+static void settings_streaming(lv_event_t *event);
+
+static void open_settings_async(void *data);
+
+/* Set when the user picked "Settings" in the overlay: suspend, then open settings on top of the launcher */
+static bool open_settings_after_stream = false;
 
 static void open_keyboard(lv_event_t *event);
 
@@ -132,6 +140,10 @@ static void constructor(lv_fragment_t *self, void *args) {
 }
 
 static void controller_dtor(lv_fragment_t *self) {
+    if (open_settings_after_stream) {
+        open_settings_after_stream = false;
+        lv_async_call(open_settings_async, ((streaming_controller_t *) self)->global);
+    }
     streaming_controller_t *fragment = (streaming_controller_t *) self;
     streaming_styles_reset(fragment);
     if (current_controller == fragment) {
@@ -199,6 +211,7 @@ static void on_view_created(lv_fragment_t *self, lv_obj_t *view) {
     app_input_set_group(&controller->global->ui.input, controller->group);
     lv_obj_add_event_cb(controller->quit_btn, exit_streaming, LV_EVENT_CLICKED, self);
     lv_obj_add_event_cb(controller->suspend_btn, suspend_streaming, LV_EVENT_CLICKED, self);
+    lv_obj_add_event_cb(controller->settings_btn, settings_streaming, LV_EVENT_CLICKED, self);
     lv_obj_add_event_cb(controller->kbd_btn, open_keyboard, LV_EVENT_CLICKED, self);
     lv_obj_add_event_cb(controller->vmouse_btn, toggle_vmouse, LV_EVENT_CLICKED, self);
     lv_obj_add_event_cb(controller->base.obj, hide_overlay, LV_EVENT_CLICKED, self);
@@ -263,6 +276,21 @@ static void exit_streaming(lv_event_t *event) {
 static void suspend_streaming(lv_event_t *event) {
     streaming_controller_t *self = lv_event_get_user_data(event);
     session_interrupt(self->global->session, false, STREAMING_INTERRUPT_USER);
+}
+
+static void settings_streaming(lv_event_t *event) {
+    streaming_controller_t *self = lv_event_get_user_data(event);
+    open_settings_after_stream = true;
+    session_interrupt(self->global->session, false, STREAMING_INTERRUPT_USER);
+}
+
+static void open_settings_async(void *data) {
+    app_t *app = data;
+    lv_fragment_t *top = lv_fragment_manager_get_top(app->ui.fm);
+    if (top == NULL) { return; }
+    lv_fragment_t *fragment = lv_fragment_create(&settings_controller_cls, app);
+    lv_obj_t *const *container = lv_fragment_get_container(top);
+    lv_fragment_manager_push(app->ui.fm, fragment, container);
 }
 
 static void open_keyboard(lv_event_t *event) {

@@ -856,7 +856,7 @@ static void open_settings(void) {
 }
 
 enum {
-    MENU_STREAM_SETTINGS = 1, MENU_WAKE, MENU_DESKTOP, MENU_STATS,
+    MENU_STREAM_SETTINGS = 1, MENU_WAKE, MENU_DESKTOP, MENU_STATS, MENU_AUDIO,
     MENU_TOOL_BASE = 1000, /* + app id of a built-in host tool */
 };
 
@@ -889,6 +889,11 @@ static void menu_click_cb(lv_event_t *e) {
             app_configuration->dash_show_stats = !app_configuration->dash_show_stats;
             settings_save(app_configuration);
             break;
+        case MENU_AUDIO:
+            /* localaudio = host keeps playing sound (e.g. headphones on the PC); applied when a game starts */
+            app_configuration->localaudio = !app_configuration->localaudio;
+            settings_save(app_configuration);
+            break;
         default:
             if (action >= MENU_TOOL_BASE) {
                 const apploader_item_t *app = app_by_id(h->controller, (int) (action - MENU_TOOL_BASE));
@@ -913,6 +918,8 @@ static void open_settings_menu(dash_home_t *h) {
     lv_obj_add_event_cb(content, menu_cancel_cb, LV_EVENT_CANCEL, h);
     lv_obj_add_event_cb(content, menu_click_cb, LV_EVENT_SHORT_CLICKED, h);
     menu_add(content, MAT_SYMBOL_SETTINGS, "Ustawienia streamu", MENU_STREAM_SETTINGS);
+    menu_add(content, MAT_SYMBOL_TV, app_configuration->localaudio ? "Dźwięk: na PC (słuchawki)"
+                                                                   : "Dźwięk: na TV", MENU_AUDIO);
     menu_add(content, MAT_SYMBOL_TV, "Wybud\u017a PC", MENU_WAKE);
     menu_add(content, MAT_SYMBOL_DESKTOP_WINDOWS, "Pulpit Windows", MENU_DESKTOP);
     const apploader_list_t *apps = h->controller->apploader_apps;

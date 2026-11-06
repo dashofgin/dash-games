@@ -919,7 +919,7 @@ static void open_settings_menu(dash_home_t *h) {
     lv_obj_add_event_cb(content, menu_cancel_cb, LV_EVENT_CANCEL, h);
     lv_obj_add_event_cb(content, menu_click_cb, LV_EVENT_SHORT_CLICKED, h);
     menu_add(content, MAT_SYMBOL_SETTINGS, "Ustawienia streamu", MENU_STREAM_SETTINGS);
-    lv_list_add_text(content, "Dźwięk gry – gdzie ma grać:");
+    lv_list_add_text(content, "Gdzie gra dźwięk gry:");
     menu_add(content, app_configuration->localaudio ? MAT_SYMBOL_TV : MAT_SYMBOL_CHECK,
              app_configuration->localaudio ? "Telewizor" : "Telewizor  (wybrane)", MENU_AUDIO_TV);
     menu_add(content, app_configuration->localaudio ? MAT_SYMBOL_CHECK : MAT_SYMBOL_DESKTOP_WINDOWS,
